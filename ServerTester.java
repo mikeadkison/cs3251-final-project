@@ -5,5 +5,6 @@ import java.util.*;
 public class ServerTester {
 	public static void main(String[] args) {
 		ServerRTPSocket serverSocket = new ServerRTPSocket(8081);
+		serverSocket.accept();
 	}
 }
