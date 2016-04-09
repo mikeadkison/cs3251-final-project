@@ -5,9 +5,14 @@ import org.json.simple.*;
 
 public class ClientRTPSocket {
 	private static final String ENCODING = "ISO-8859-1";
+	private InetAddress serverIPAddress;
+	private int serverUDPPort;
 
 	public ClientRTPSocket(InetAddress IPAddress, int UDPport) {
 		DatagramSocket socket = null;
+		this.serverIPAddress = IPAddress;
+		this.serverUDPPort = UDPport;
+
 		try {
 			socket = new DatagramSocket();
 		} catch (SocketException e) {
@@ -16,17 +21,9 @@ public class ClientRTPSocket {
 		}
 
 		// connection initiation section
-		JSONObject connInitMsg = new JSONObject();
-		connInitMsg.put("type", "initConnection");
-		byte[] connInitMsgBytes = null;
-		try {
-			connInitMsgBytes = (connInitMsg.toString() + "\n").getBytes(ENCODING);
-		} catch (UnsupportedEncodingException e) {
-			System.out.println("unsupported encoding");
-			System.exit(-1);
-		}
+		DatagramPacket connInitPacket = constructHandshakePacket("initConnection");
 
-		DatagramPacket connInitPacket = new DatagramPacket(connInitMsgBytes, connInitMsgBytes.length, IPAddress, UDPport);
+		
 		try {
 			socket.send(connInitPacket);
 		} catch (IOException e) {
@@ -34,6 +31,20 @@ public class ClientRTPSocket {
 			System.exit(-1);
 		}
 
+		
+		JSONObject received = recv(socket);
+		if (received.get("type").equals("initConnectionConfirm")) {
+			//send the last part of the 3-way handshake
+			System.out.println("received initConnectionConfirm, ACKING");
+			DatagramPacket connInitLastPacket = constructHandshakePacket("initConnectionConfirmAck");
+		}
+
+	}
+	public void send(byte[] sendBytes) {
+
+	}
+
+	private JSONObject recv(DatagramSocket socket) {
 		byte[] rcvdBytes = new byte[1000];
 		DatagramPacket rcvPkt = new DatagramPacket(rcvdBytes, rcvdBytes.length);
 		try {
@@ -42,16 +53,7 @@ public class ClientRTPSocket {
 			System.out.println("issue receiving on socket" + socket);
 			System.exit(0);
 		}
-		JSONObject received = packetToJSON(rcvPkt);
-		System.out.println(received);
 
-	}
-	public void send(byte[] sendBytes) {
-
-	}
-
-	private JSONObject packetToJSON(DatagramPacket rcvPkt) {
-		
 		String rcvdString = null;
 		try {
 			rcvdString = new String(rcvPkt.getData(), ENCODING);
@@ -62,5 +64,20 @@ public class ClientRTPSocket {
 
 		rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
 		return (JSONObject) JSONValue.parse(rcvdString);
+	}
+
+	private DatagramPacket constructHandshakePacket(String type) {
+		// connection initiation section
+		JSONObject handshakeMsg = new JSONObject();
+		handshakeMsg.put("type", type);
+		byte[] handshakeMsgBytes = null;
+		try {
+			handshakeMsgBytes = (handshakeMsg.toString() + "\n").getBytes(ENCODING);
+		} catch (UnsupportedEncodingException e) {
+			System.out.println("unsupported encoding");
+			System.exit(-1);
+		}
+		DatagramPacket handshakePacket = new DatagramPacket(handshakeMsgBytes, handshakeMsgBytes.length, serverIPAddress, serverUDPPort);
+		return handshakePacket;
 	}
 }

@@ -81,6 +81,7 @@ public class ServerRTPSocket {
 
 				rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
 				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
+				System.out.println(rcvdString);
 
 				//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
 				if (received.get("type").equals("initConnection") && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
