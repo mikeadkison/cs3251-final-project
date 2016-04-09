@@ -3,15 +3,20 @@ import java.net.*;
 import java.util.*;
 import org.json.simple.*;
 
+/**
+ * used to connect and send data to one server
+ */
 public class ClientRTPSocket {
 	private static final String ENCODING = "ISO-8859-1";
 	private InetAddress serverIPAddress;
 	private int serverUDPPort;
 	DatagramSocket socket;
+	int seqNum;
 
 	public ClientRTPSocket(InetAddress IPAddress, int UDPport) {
 		this.serverIPAddress = IPAddress;
 		this.serverUDPPort = UDPport;
+		this.seqNum = 0;
 
 		try {
 			socket = new DatagramSocket();
@@ -65,6 +70,8 @@ public class ClientRTPSocket {
 			JSONObject packetJSON = new JSONObject();
 			packetJSON.put("type", "data");
 			packetJSON.put("data", dataAsString);
+			packetJSON.put("seqNum", seqNum);
+			seqNum++;
 
 			DatagramPacket sndPkt = jsonToPacket(packetJSON);
 			try {

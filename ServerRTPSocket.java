@@ -24,10 +24,12 @@ public class ServerRTPSocket {
 
 	/**
 	 * blocking
+	 * returns an object from which the application can read from the stream
 	 */
-	public void accept() {
+	public ServerRTPReaderSocket accept() {
 		Msg acceptMsg = new Msg("accept");
 		msgsForThread.add(acceptMsg);
+		return null;
 	}
 
 
@@ -43,7 +45,8 @@ public class ServerRTPSocket {
 		private AcceptStatus acceptStatus;
 		private InetAddress connReqAddr; //address of client requesting a connection
 		private int connReqPort; //port of client requesting a connection
-		private Map<IPandPort, ConcurrentLinkedQueue<String>> clientToBufferMap;
+		private Map<ServerRTPReaderSocket, Queues> clientToBufferMap;
+		
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {
 			this.socket = socket;
@@ -98,9 +101,9 @@ public class ServerRTPSocket {
 					acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
 
 				} else if (received.get("type").equals("data")) {
-					ConcurrentLinkedQueue queue = clientToBufferMap.get(new IPandPort(connReqAddr, connReqPort));
-					queue.add(received.toString()); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-					System.out.println(queue);
+					Queues queues = clientToBufferMap.get(new ServerRTPReaderSocket(connReqAddr, connReqPort));
+					queues.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+					queues.updateAppQueue(); //give the applications a chunk of data if you can
 				}
 
 				if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
@@ -131,38 +134,54 @@ public class ServerRTPSocket {
 					System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
-					IPandPort client = new IPandPort(connReqAddr, connReqPort);
-					clientToBufferMap.put(client, new ConcurrentLinkedQueue<>());
+					ServerRTPReaderSocket client = new ServerRTPReaderSocket(connReqAddr, connReqPort);
+					clientToBufferMap.put(client, new Queues());
 				}
 			}
 		}
 
 		/**
-		 * used to uniquely identify a connection
+		 * contains two queues
+		 * the first queue is size-limited - it serves as the packet buffer for each client
+		 * the second queue will contain in-order data which is ready for the application to consume via the api
+		 *
+		 * the second queue will be derived from the first
 		 */
-		private class IPandPort {
-			InetAddress IP;
-			int UDPport;
-			public IPandPort(InetAddress IP, int UDPport) {
-				this.IP = IP;
-				this.UDPport = UDPport;
+		private class Queues {
+			private final List<JSONObject> bufferList = new LinkedList<>(); //the first queue (see above)
+			private final ConcurrentLinkedQueue<byte[]> appQueue = new ConcurrentLinkedQueue<>();
+			private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored
+
+			public Queues() {
+				highestSeqNumGivenToApplication = -1; //nothing has been given to application yet
 			}
 
-			@Override
-			public boolean equals(Object other) {
-				if (this == other) {
-					return true;
+			/**
+			 * look at the buffer and see what can be given to the application and put that in the appQueue
+			 */
+			private void updateAppQueue() {
+				long seqNum = highestSeqNumGivenToApplication + 1;
+				boolean miss = false;
+				while (!miss) { //while the packet with the next seqNum can be found in the buffer:
+					for (JSONObject packet: bufferList) {
+						if ((Long) packet.get("seqNum") == seqNum) {
+							String dataStr = (String) packet.get("data");
+							byte[] dataBytes = null;
+							try {
+								dataBytes = (dataStr + "\n").getBytes(ENCODING);
+							} catch (UnsupportedEncodingException e) {
+								System.out.println("unsupported encoding");
+								System.exit(-1);
+							}
+							appQueue.add(dataBytes);
+							bufferList.remove(packet);
+							highestSeqNumGivenToApplication = seqNum;
+							miss = false;
+							continue;
+						}
+					}
+					miss = true;
 				}
-				if (!(other instanceof IPandPort)) {
-					return false;
-				}
-				final IPandPort theOther = (IPandPort) other;
-				return this.IP.equals(theOther.IP) && this.UDPport == theOther.UDPport;
-			}
-
-			@Override
-			public int hashCode() {
-				return this.IP.hashCode() + this.UDPport * 13;
 			}
 		}
 	}
