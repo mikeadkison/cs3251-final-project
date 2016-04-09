@@ -123,7 +123,37 @@ public class ServerRTPSocket {
 					System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
+					
 				}
+			}
+		}
+
+		/**
+		 * used to uniquely identify a connection
+		 */
+		private class IPandPort {
+			InetAddress IP;
+			int UDPport;
+			public IPandPort(InetAddress IP, int UDPport) {
+				this.IP = IP;
+				this.UDPport = UDPport;
+			}
+
+			@Override
+			public boolean equals(Object other) {
+				if (this == other) {
+					return true;
+				}
+				if (!(other instanceof IPandPort)) {
+					return false;
+				}
+				final IPandPort theOther = (IPandPort) other;
+				return this.IP.equals(theOther.IP) && this.UDPport == theOther.UDPport;
+			}
+
+			@Override
+			public int hashCode() {
+				return this.IP.hashCode() + this.UDPport * 13;
 			}
 		}
 	}
