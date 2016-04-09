@@ -81,15 +81,18 @@ public class ServerRTPSocket {
 
 				rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
 				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
-				System.out.println(rcvdString);
+				//System.out.println(received);
 
 				//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
 				if (received.get("type").equals("initConnection") && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
 					acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
 					connReqAddr = rcvPkt.getAddress();
 					connReqPort = rcvPkt.getPort();
-				} else {
-
+				} else if (received.get("type").equals("initConnectionConfirmAck") //received last part of 3-way handshake
+							&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
+							&& rcvPkt.getAddress().equals(connReqAddr) //make sure that the last part of the handshake came from the client you were expecting it to come from
+							&& rcvPkt.getPort() == connReqPort) {
+					acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
 				}
 
 				if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
@@ -114,6 +117,12 @@ public class ServerRTPSocket {
 						System.out.println("issue sending connReqRespMsg");
 						System.exit(-1);
 					}
+					acceptStatus = AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST;
+
+				} else if (acceptStatus == AcceptStatus.RECEIVED_ACK_TO_RESPONSE) {
+					System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
+					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
+					acceptStatus = null;
 				}
 			}
 		}

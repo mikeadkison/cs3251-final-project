@@ -37,6 +37,12 @@ public class ClientRTPSocket {
 			//send the last part of the 3-way handshake
 			System.out.println("received initConnectionConfirm, ACKING");
 			DatagramPacket connInitLastPacket = constructHandshakePacket("initConnectionConfirmAck");
+			try {
+				socket.send(connInitLastPacket);
+			} catch (IOException e) {
+				System.out.println("issue sending initConnectionConfirmAck");
+				System.exit(-1);
+			}
 		}
 
 	}
