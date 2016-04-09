@@ -40,15 +40,17 @@ public class ServerRTPSocket {
 			RESPONDED_TO_CONNECTION_REQUEST,
 			RECEIVED_ACK_TO_RESPONSE
 		}
-		private static AcceptStatus acceptStatus;
-		private static InetAddress connReqAddr; //address of client requesting a connection
-		private static int connReqPort; //port of client requesting a connection
+		private AcceptStatus acceptStatus;
+		private InetAddress connReqAddr; //address of client requesting a connection
+		private int connReqPort; //port of client requesting a connection
+		private Map<IPandPort, ConcurrentLinkedQueue<String>> clientToBufferMap;
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {
 			this.socket = socket;
 			this.msgs = msgs;
 
 			acceptStatus = null;
+			clientToBufferMap = new HashMap<>();
 		}
 
 		public void run() {
@@ -88,11 +90,17 @@ public class ServerRTPSocket {
 					acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
 					connReqAddr = rcvPkt.getAddress();
 					connReqPort = rcvPkt.getPort();
+
 				} else if (received.get("type").equals("initConnectionConfirmAck") //received last part of 3-way handshake
 							&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
 							&& rcvPkt.getAddress().equals(connReqAddr) //make sure that the last part of the handshake came from the client you were expecting it to come from
 							&& rcvPkt.getPort() == connReqPort) {
 					acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
+
+				} else if (received.get("type").equals("data")) {
+					ConcurrentLinkedQueue queue = clientToBufferMap.get(new IPandPort(connReqAddr, connReqPort));
+					queue.add(received.toString()); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+					System.out.println(queue);
 				}
 
 				if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
@@ -123,7 +131,8 @@ public class ServerRTPSocket {
 					System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
-					
+					IPandPort client = new IPandPort(connReqAddr, connReqPort);
+					clientToBufferMap.put(client, new ConcurrentLinkedQueue<>());
 				}
 			}
 		}
