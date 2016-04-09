@@ -34,8 +34,33 @@ public class ClientRTPSocket {
 			System.exit(-1);
 		}
 
+		byte[] rcvdBytes = new byte[1000];
+		DatagramPacket rcvPkt = new DatagramPacket(rcvdBytes, rcvdBytes.length);
+		try {
+			socket.receive(rcvPkt);
+		} catch (IOException e) {
+			System.out.println("issue receiving on socket" + socket);
+			System.exit(0);
+		}
+		JSONObject received = packetToJSON(rcvPkt);
+		System.out.println(received);
+
 	}
 	public void send(byte[] sendBytes) {
 
+	}
+
+	private JSONObject packetToJSON(DatagramPacket rcvPkt) {
+		
+		String rcvdString = null;
+		try {
+			rcvdString = new String(rcvPkt.getData(), ENCODING);
+		} catch (UnsupportedEncodingException e) {
+			System.out.println("unsupported encoding while decoding udp message");
+			System.exit(-1);
+		}
+
+		rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
+		return (JSONObject) JSONValue.parse(rcvdString);
 	}
 }
