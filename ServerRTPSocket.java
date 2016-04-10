@@ -7,6 +7,8 @@ import java.util.concurrent.*;
 public class ServerRTPSocket {
 	private static final String ENCODING = "ISO-8859-1";
 	private ConcurrentLinkedQueue<Msg> msgsForThread;
+	private static ServerRTPReaderSocket readerSocket; //will be created by the server thread when accept is called
+	private static Object lock = new Object();
 
 
 	public ServerRTPSocket(int UDPport) {
@@ -29,11 +31,18 @@ public class ServerRTPSocket {
 	public ServerRTPReaderSocket accept() {
 		Msg acceptMsg = new Msg("accept");
 		msgsForThread.add(acceptMsg);
-		synchronized(this) {
-			while (true) {
-				this.wait();
+		synchronized(lock) {
+			while (null == readerSocket) {
+				try {
+					lock.wait();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
 			}
 		}
+		ServerRTPReaderSocket toReturn = readerSocket;
+		readerSocket = null;
+		return toReturn;
 	}
 
 
@@ -139,9 +148,12 @@ public class ServerRTPSocket {
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
 					Queues clientQueues = new Queues();
-					ServerRTPReaderSocket client = new ServerRTPReaderSocket(connReqAddr, connReqPort, clientQueues.appQueue);
-					clientToBufferMap.put(client, clientQueues);
-					ServerRTPReaderSocket.
+					ServerRTPReaderSocket socketForClient = new ServerRTPReaderSocket(connReqAddr, connReqPort, clientQueues.appQueue);
+					clientToBufferMap.put(socketForClient, clientQueues);
+					synchronized(lock) {
+						readerSocket = socketForClient;
+						lock.notify();
+					}
 				}
 			}
 		}
@@ -174,7 +186,7 @@ public class ServerRTPSocket {
 							String dataStr = (String) packet.get("data");
 							byte[] dataBytes = null;
 							try {
-								dataBytes = (dataStr + "\n").getBytes(ENCODING);
+								dataBytes = dataStr.getBytes(ENCODING);
 							} catch (UnsupportedEncodingException e) {
 								System.out.println("unsupported encoding");
 								System.exit(-1);
@@ -183,6 +195,7 @@ public class ServerRTPSocket {
 							bufferList.remove(packet);
 							highestSeqNumGivenToApplication = seqNum;
 							miss = false;
+							System.out.println("added seqNum " + seqNum + " to application queue with size " + dataBytes.length);
 							continue;
 						}
 					}

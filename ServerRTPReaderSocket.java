@@ -25,19 +25,22 @@ public class ServerRTPReaderSocket {
 	 * gives the application a byte array of all the data received so far. The data is consumed
 	 */
 	public byte[] read() {
-		byte[][] arrays = (byte[][]) dataQueue.toArray();
+		Object[] arrays = (Object[]) dataQueue.toArray();
 
 		int totalSize = 0;
 		for (int i = 0; i < arrays.length; i++) {
-			totalSize += arrays[i].length;
+			totalSize += ((byte[]) arrays[i]).length;
 		}
 
 		byte[] allDataArr = new byte[totalSize]; //this byte array will contain all of the data from the stream so far and will be returned to the application
 		int amtCopiedSoFar = 0;
-		for (int i = 0; i < dataQueue.size(); i++) {
-			System.arraycopy(arrays[i], 0, allDataArr, amtCopiedSoFar, arrays[i].length);
-			amtCopiedSoFar += arrays[i].length;
+		for (int i = 0; i < arrays.length; i++) {
+			System.arraycopy((byte[]) arrays[i], 0, allDataArr, amtCopiedSoFar, ((byte[]) arrays[i]).length);
+			amtCopiedSoFar += ((byte[]) arrays[i]).length;
+			dataQueue.remove(arrays[i]);
+			System.out.println("amtCopiedSoFar: " + amtCopiedSoFar);
 		}
+
 		return allDataArr;
 	}
 
