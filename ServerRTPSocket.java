@@ -7,7 +7,7 @@ import java.util.concurrent.*;
 public class ServerRTPSocket {
 	private static final String ENCODING = "ISO-8859-1";
 	private ConcurrentLinkedQueue<Msg> msgsForThread;
-	private static ServerRTPReaderSocket readerSocket; //will be created by the server thread when accept is called
+	private static RTPSocket readerSocket; //will be created by the server thread when accept is called
 	private static Object lock = new Object();
 
 
@@ -28,7 +28,7 @@ public class ServerRTPSocket {
 	 * blocking
 	 * returns an object from which the application can read from the stream
 	 */
-	public ServerRTPReaderSocket accept() {
+	public RTPSocket accept() {
 		Msg acceptMsg = new Msg("accept");
 		msgsForThread.add(acceptMsg);
 		synchronized(lock) {
@@ -40,7 +40,7 @@ public class ServerRTPSocket {
 				}
 			}
 		}
-		ServerRTPReaderSocket toReturn = readerSocket;
+		RTPSocket toReturn = readerSocket;
 		readerSocket = null;
 		return toReturn;
 	}
@@ -58,7 +58,7 @@ public class ServerRTPSocket {
 		private AcceptStatus acceptStatus;
 		private InetAddress connReqAddr; //address of client requesting a connection
 		private int connReqPort; //port of client requesting a connection
-		private Map<ServerRTPReaderSocket, Queues> clientToBufferMap;
+		private Map<RTPSocket, Queues> clientToBufferMap;
 		
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {
@@ -114,7 +114,7 @@ public class ServerRTPSocket {
 					acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
 
 				} else if (received.get("type").equals("data")) {
-					Queues queues = clientToBufferMap.get(new ServerRTPReaderSocket(connReqAddr, connReqPort));
+					Queues queues = clientToBufferMap.get(new RTPSocket(connReqAddr, connReqPort));
 					queues.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 					queues.updateAppQueue(); //give the applications a chunk of data if you can
 				}
@@ -148,7 +148,7 @@ public class ServerRTPSocket {
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
 					Queues clientQueues = new Queues();
-					ServerRTPReaderSocket socketForClient = new ServerRTPReaderSocket(connReqAddr, connReqPort, clientQueues.appQueue);
+					RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.appQueue);
 					clientToBufferMap.put(socketForClient, clientQueues);
 					synchronized(lock) {
 						readerSocket = socketForClient;

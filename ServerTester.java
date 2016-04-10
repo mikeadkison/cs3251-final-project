@@ -7,7 +7,7 @@ public class ServerTester {
 
 	public static void main(String[] args) {
 		ServerRTPSocket serverSocket = new ServerRTPSocket(8081);
-		ServerRTPReaderSocket rcvSocket = serverSocket.accept();
+		RTPSocket rcvSocket = serverSocket.accept();
 		while (true) {
 			try {
 				byte[] data = rcvSocket.read();
