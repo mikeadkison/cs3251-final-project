@@ -73,6 +73,7 @@ public class ServerRTPSocket {
 			System.out.println("server thread started");
 			//where the work of the thread gets done
 			while (true) {
+				System.out.println("running---------------------");
 				if (!msgs.isEmpty()) {
 					Msg msg = msgs.poll();
 					//since accept() is blocking, there will be only one accept msg at once
@@ -80,7 +81,8 @@ public class ServerRTPSocket {
 						acceptStatus = AcceptStatus.AVAILABLE_FOR_CONNECTION;
 					}
 				}
-
+				
+				
 				byte[] rcvdBytes = new byte[1000];
 				DatagramPacket rcvPkt = new DatagramPacket(rcvdBytes, rcvdBytes.length);
 				try {
@@ -96,7 +98,7 @@ public class ServerRTPSocket {
 					System.out.println("unsupported encoding while decoding udp message");
 					System.exit(-1);
 				}
-
+				
 				rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
 				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
 				//System.out.println(received);
@@ -116,7 +118,7 @@ public class ServerRTPSocket {
 				} else if (received.get("type").equals("data")) {
 					Queues queues = clientToBufferMap.get(new RTPSocket(connReqAddr, connReqPort));
 					queues.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-					queues.updateAppQueue(); //give the applications a chunk of data if you can
+					queues.updatedataToAppQueue(); //give the applications a chunk of data if you can
 				}
 
 				if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
@@ -148,26 +150,82 @@ public class ServerRTPSocket {
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
 					Queues clientQueues = new Queues();
-					RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.appQueue);
+					RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.dataToAppQueue, clientQueues.dataFromAppQueue);
 					clientToBufferMap.put(socketForClient, clientQueues);
 					synchronized(lock) {
 						readerSocket = socketForClient;
 						lock.notify();
 					}
 				}
+				System.out.println("still running---------------------");
+				//for every RTPSocket, send stuff the socket wants to send (to clients)
+				for (RTPSocket rtpSocket: clientToBufferMap.keySet()) {
+
+/*					try {
+						sleep(0);
+					} catch (InterruptedException e) {
+						System.out.println("interrupted");
+					}*/
+					ConcurrentLinkedQueue<byte[]> stuffToSend = rtpSocket.dataOutQueue;
+					if (stuffToSend.size() > 0) {
+						System.out.println("-----------------\n\n");
+						System.out.println("something to send");
+						System.out.println("------------------");
+					}
+					while (stuffToSend.size() > 0) { //could have some issues with dominating the connection if the queue is constantly populated
+						byte[] sendBytes = stuffToSend.poll();
+
+						//put the data in a packet and send it
+						String dataAsString = null;
+						try {
+							dataAsString = new String(sendBytes, ENCODING);
+						} catch (UnsupportedEncodingException e) {
+							System.out.println ("issue encoding");
+						}
+						
+						JSONObject packetJSON = new JSONObject();
+						packetJSON.put("type", "data");
+						packetJSON.put("data", dataAsString);
+						packetJSON.put("seqNum", rtpSocket.seqNum);
+						rtpSocket.seqNum++;
+
+						DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
+						try {
+							socket.send(sndPkt);
+							System.out.println("sent: " + dataAsString);
+						} catch (IOException e) {
+							System.out.println("issue sending packet");
+						}
+					}
+				}
 			}
 		}
 
+		private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {
+			byte[] bytes = null;
+			try {
+				bytes = (json.toString() + "\n").getBytes(ENCODING);
+			} catch (UnsupportedEncodingException e) {
+				System.out.println("unsupported encoding");
+				System.exit(-1);
+			}
+			DatagramPacket packet = new DatagramPacket(bytes, bytes.length, destIP, destPort);
+			return packet;
+		}
+
 		/**
-		 * contains two queues
+		 * contains three queues
 		 * the first queue is size-limited - it serves as the packet buffer for each client
 		 * the second queue will contain in-order data which is ready for the application to consume via the api
 		 *
 		 * the second queue will be derived from the first
+		 *
+		 * the third queue contains data that the api has been asked by the application to send out
 		 */
 		private class Queues {
 			private final List<JSONObject> bufferList = new LinkedList<>(); //the first queue (see above)
-			private final ConcurrentLinkedQueue<byte[]> appQueue = new ConcurrentLinkedQueue<>();
+			private final ConcurrentLinkedQueue<byte[]> dataToAppQueue = new ConcurrentLinkedQueue<>(); //contains in-order data ready for api to put together for application
+			private final ConcurrentLinkedQueue<byte[]> dataFromAppQueue = new ConcurrentLinkedQueue<>(); //contains data which the application wants sent. The data will already be sized properly for packets
 			private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored
 
 			public Queues() {
@@ -175,9 +233,9 @@ public class ServerRTPSocket {
 			}
 
 			/**
-			 * look at the buffer and see what can be given to the application and put that in the appQueue
+			 * look at the buffer and see what can be given to the application and put that in the dataToAppQueue
 			 */
-			private void updateAppQueue() {
+			private void updatedataToAppQueue() {
 				long seqNum = highestSeqNumGivenToApplication + 1;
 				boolean miss = false;
 				while (!miss) { //while the packet with the next seqNum can be found in the buffer:
@@ -191,11 +249,11 @@ public class ServerRTPSocket {
 								System.out.println("unsupported encoding");
 								System.exit(-1);
 							}
-							appQueue.add(dataBytes);
+							dataToAppQueue.add(dataBytes);
 							bufferList.remove(packet);
 							highestSeqNumGivenToApplication = seqNum;
 							miss = false;
-							System.out.println("added seqNum " + seqNum + " to application queue with size " + dataBytes.length);
+							System.out.println("added seqNum " + seqNum + " to application in queue with size " + dataBytes.length);
 							continue;
 						}
 					}

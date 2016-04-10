@@ -1,10 +1,11 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.*;
 import org.json.simple.*;
 
 /**
- * used to connect and send data to one server
+ * used to connect to the server and then generate an RTPSocket for further communication
  */
 public class ClientRTPSocket {
 	private static final String ENCODING = "ISO-8859-1";
@@ -17,7 +18,12 @@ public class ClientRTPSocket {
 		this.serverIPAddress = IPAddress;
 		this.serverUDPPort = UDPport;
 		this.seqNum = 0;
+	}
 
+	public RTPSocket connect() {
+		/*
+		 * initialize connection with 3-way handshake
+		 */
 		try {
 			socket = new DatagramSocket();
 		} catch (SocketException e) {
@@ -48,40 +54,17 @@ public class ClientRTPSocket {
 				System.out.println("issue sending initConnectionConfirmAck");
 				System.exit(-1);
 			}
+
+			ConcurrentLinkedQueue<byte[]> dataInQueue = new ConcurrentLinkedQueue<>();
+			ConcurrentLinkedQueue<byte[]> dataOutQueue = new ConcurrentLinkedQueue<>();
+			
+			RTPSocket rtpSocket = new RTPSocket(serverIPAddress, serverUDPPort, dataInQueue, dataOutQueue);
+			ClientThread clientThread = new ClientThread(socket, rtpSocket);
+			clientThread.start();
+			return rtpSocket;
 		}
 
-	}
-
-	/**
-	 * sends something
-	 * data is split into 500 byte sections to leave lots of room for packet headers and fluff
-	 */
-	public void send(byte[] sendBytes) {
-		final int DATA_PER_PACKET = 500;
-		for (int offset = 0; offset < sendBytes.length; offset += DATA_PER_PACKET) {
-			int length = offset + DATA_PER_PACKET <= sendBytes.length ? DATA_PER_PACKET : sendBytes.length - offset;
-			String dataAsString = null;
-			try {
-				dataAsString = new String(sendBytes, offset, length, ENCODING);
-			} catch (UnsupportedEncodingException e) {
-				System.out.println ("issue encoding");
-			}
-			
-			JSONObject packetJSON = new JSONObject();
-			packetJSON.put("type", "data");
-			packetJSON.put("data", dataAsString);
-			packetJSON.put("seqNum", seqNum);
-			seqNum++;
-
-			DatagramPacket sndPkt = jsonToPacket(packetJSON);
-			try {
-				socket.send(sndPkt);
-			} catch (IOException e) {
-				System.out.println("issue sending packet in send()");
-			}
-			
-
-		}
+		return null;
 	}
 
 	private JSONObject recv() {

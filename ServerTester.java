@@ -13,7 +13,8 @@ public class ServerTester {
 				byte[] data = rcvSocket.read();
 				String str = new String(data, ENCODING);
 				if (data.length > 0) {
-					System.out.println("read data from api: " + str);
+					System.out.println("read data from api size " + data.length);
+					rcvSocket.send("got your data".getBytes(ENCODING));
 				}
 			} catch (UnsupportedEncodingException e) {
 				e.printStackTrace();
