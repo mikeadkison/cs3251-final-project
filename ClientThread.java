@@ -79,6 +79,17 @@ public class ClientThread extends Thread {
 				if (received.get("type").equals("data")) {
 					bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 					updateDataToAppQueue(); //give the applications a chunk of data if you can
+
+					// ack the received packet
+					System.out.println("received: " + received + ", ACKing");
+					JSONObject ackJSON = new JSONObject();
+					ackJSON.put("type", "ACK");
+					ackJSON.put("seqNum",  received.get("seqNum"));
+					try {
+						socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
+					} catch (IOException e) {
+						System.out.println("issue sending ACK");
+					}
 				}
 			}
 		}

@@ -110,7 +110,6 @@ public class ServerRTPSocket {
 					}
 					rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
 					JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
-					//System.out.println(received);
 
 					//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
 					if (received.get("type").equals("initConnection") && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
@@ -128,7 +127,18 @@ public class ServerRTPSocket {
 					} else if (received.get("type").equals("data")) {
 						Queues queues = clientToBufferMap.get(new RTPSocket(connReqAddr, connReqPort));
 						queues.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-						queues.updatedataToAppQueue(); //give the applications a chunk of data if you can
+						queues.updateDataToAppQueue(); //give the applications a chunk of data if you can
+
+						// ack the received packet
+						System.out.println("received: " + received + ", ACKing");
+						JSONObject ackJSON = new JSONObject();
+						ackJSON.put("type", "ACK");
+						ackJSON.put("seqNum",  received.get("seqNum"));
+						try {
+							socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
+						} catch (IOException e) {
+							System.out.println("issue sending ACK");
+						}
 					}
 
 					if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
@@ -244,7 +254,7 @@ public class ServerRTPSocket {
 			/**
 			 * look at the buffer and see what can be given to the application and put that in the dataToAppQueue
 			 */
-			private void updatedataToAppQueue() {
+			private void updateDataToAppQueue() {
 				long seqNum = highestSeqNumGivenToApplication + 1;
 				boolean miss = false;
 				while (!miss) { //while the packet with the next seqNum can be found in the buffer:

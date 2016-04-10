@@ -12,6 +12,7 @@ public class RTPSocket {
 	protected long rcvWinSize; //the current size of the window (the buffer)
 	private long maxRcvWinSize; //the biggest the window can get
 	protected long peerWinSize; //the window size of the host you are connected to
+	protected long unAckedPackets;
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
 		this(IP, UDPport);
