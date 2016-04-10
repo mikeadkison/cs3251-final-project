@@ -29,7 +29,11 @@ public class ServerRTPSocket {
 	public ServerRTPReaderSocket accept() {
 		Msg acceptMsg = new Msg("accept");
 		msgsForThread.add(acceptMsg);
-		return null;
+		synchronized(this) {
+			while (true) {
+				this.wait();
+			}
+		}
 	}
 
 
@@ -134,8 +138,10 @@ public class ServerRTPSocket {
 					System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
-					ServerRTPReaderSocket client = new ServerRTPReaderSocket(connReqAddr, connReqPort);
-					clientToBufferMap.put(client, new Queues());
+					Queues clientQueues = new Queues();
+					ServerRTPReaderSocket client = new ServerRTPReaderSocket(connReqAddr, connReqPort, clientQueues.appQueue);
+					clientToBufferMap.put(client, clientQueues);
+					ServerRTPReaderSocket.
 				}
 			}
 		}
