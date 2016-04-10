@@ -9,6 +9,7 @@ public class ServerRTPSocket {
 	private ConcurrentLinkedQueue<Msg> msgsForThread;
 	private static RTPSocket readerSocket; //will be created by the server thread when accept is called
 	private static Object lock = new Object();
+	private static final int TIMEOUT = 50; //50 ms receive timeout
 
 
 	public ServerRTPSocket(int UDPport) {
@@ -72,8 +73,9 @@ public class ServerRTPSocket {
 		public void run() {
 			System.out.println("server thread started");
 			//where the work of the thread gets done
+			
 			while (true) {
-				System.out.println("running---------------------");
+				boolean receivedSomething = true;
 				if (!msgs.isEmpty()) {
 					Msg msg = msgs.poll();
 					//since accept() is blocking, there will be only one accept msg at once
@@ -82,82 +84,88 @@ public class ServerRTPSocket {
 					}
 				}
 				
-				
+
 				byte[] rcvdBytes = new byte[1000];
 				DatagramPacket rcvPkt = new DatagramPacket(rcvdBytes, rcvdBytes.length);
 				try {
+					socket.setSoTimeout(TIMEOUT);
 					socket.receive(rcvPkt);
+				} catch (SocketTimeoutException e) {
+					//socket timed out
+					receivedSomething = false;
 				} catch (IOException e) {
 					System.out.println("issue receiving on socket" + socket);
-					System.exit(0);
-				}
-				String rcvdString = null;
-				try {
-					rcvdString = new String(rcvPkt.getData(), ENCODING);
-				} catch (UnsupportedEncodingException e) {
-					System.out.println("unsupported encoding while decoding udp message");
-					System.exit(-1);
-				}
-				
-				rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
-				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
-				//System.out.println(received);
-
-				//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
-				if (received.get("type").equals("initConnection") && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
-					acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
-					connReqAddr = rcvPkt.getAddress();
-					connReqPort = rcvPkt.getPort();
-
-				} else if (received.get("type").equals("initConnectionConfirmAck") //received last part of 3-way handshake
-							&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
-							&& rcvPkt.getAddress().equals(connReqAddr) //make sure that the last part of the handshake came from the client you were expecting it to come from
-							&& rcvPkt.getPort() == connReqPort) {
-					acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
-
-				} else if (received.get("type").equals("data")) {
-					Queues queues = clientToBufferMap.get(new RTPSocket(connReqAddr, connReqPort));
-					queues.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-					queues.updatedataToAppQueue(); //give the applications a chunk of data if you can
 				}
 
-				if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
-					System.out.println("received connection request");
-					System.out.println("responding...");
-
-					//responding to connection request
-					JSONObject connReqRespMsgJSON = new JSONObject();
-					connReqRespMsgJSON.put("type", "initConnectionConfirm");
-					byte[] connReqRespBytes = null;
+				if (receivedSomething) {
+					String rcvdString = null;
 					try {
-						connReqRespBytes = (connReqRespMsgJSON.toString() + "\n").getBytes(ENCODING);
+						rcvdString = new String(rcvPkt.getData(), ENCODING);
 					} catch (UnsupportedEncodingException e) {
-						System.out.println("unsupported encoding");
+						System.out.println("unsupported encoding while decoding udp message");
 						System.exit(-1);
 					}
+					rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
+					JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
+					//System.out.println(received);
 
-					DatagramPacket connReqRespMsg = new DatagramPacket(connReqRespBytes, connReqRespBytes.length, connReqAddr, connReqPort);
-					try {
-						socket.send(connReqRespMsg);
-					} catch (IOException e) {
-						System.out.println("issue sending connReqRespMsg");
-						System.exit(-1);
+					//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
+					if (received.get("type").equals("initConnection") && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
+						acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
+						connReqAddr = rcvPkt.getAddress();
+						connReqPort = rcvPkt.getPort();
+
+					} else if (received.get("type").equals("initConnectionConfirmAck") //received last part of 3-way handshake
+								&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
+								&& rcvPkt.getAddress().equals(connReqAddr) //make sure that the last part of the handshake came from the client you were expecting it to come from
+								&& rcvPkt.getPort() == connReqPort) {
+						acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
+
+					} else if (received.get("type").equals("data")) {
+						Queues queues = clientToBufferMap.get(new RTPSocket(connReqAddr, connReqPort));
+						queues.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+						queues.updatedataToAppQueue(); //give the applications a chunk of data if you can
 					}
-					acceptStatus = AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST;
 
-				} else if (acceptStatus == AcceptStatus.RECEIVED_ACK_TO_RESPONSE) {
-					System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
-					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
-					acceptStatus = null;
-					Queues clientQueues = new Queues();
-					RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.dataToAppQueue, clientQueues.dataFromAppQueue);
-					clientToBufferMap.put(socketForClient, clientQueues);
-					synchronized(lock) {
-						readerSocket = socketForClient;
-						lock.notify();
+					if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
+						System.out.println("received connection request");
+						System.out.println("responding...");
+
+						//responding to connection request
+						JSONObject connReqRespMsgJSON = new JSONObject();
+						connReqRespMsgJSON.put("type", "initConnectionConfirm");
+						byte[] connReqRespBytes = null;
+						try {
+							connReqRespBytes = (connReqRespMsgJSON.toString() + "\n").getBytes(ENCODING);
+						} catch (UnsupportedEncodingException e) {
+							System.out.println("unsupported encoding");
+							System.exit(-1);
+						}
+
+						DatagramPacket connReqRespMsg = new DatagramPacket(connReqRespBytes, connReqRespBytes.length, connReqAddr, connReqPort);
+						try {
+							socket.send(connReqRespMsg);
+						} catch (IOException e) {
+							System.out.println("issue sending connReqRespMsg");
+							System.exit(-1);
+						}
+						acceptStatus = AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST;
+
+					} else if (acceptStatus == AcceptStatus.RECEIVED_ACK_TO_RESPONSE) {
+						System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
+						//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
+						acceptStatus = null;
+						Queues clientQueues = new Queues();
+						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.dataToAppQueue, clientQueues.dataFromAppQueue);
+						clientToBufferMap.put(socketForClient, clientQueues);
+						synchronized(lock) {
+							readerSocket = socketForClient;
+							lock.notify();
+						}
 					}
 				}
-				System.out.println("still running---------------------");
+
+
 				//for every RTPSocket, send stuff the socket wants to send (to clients)
 				for (RTPSocket rtpSocket: clientToBufferMap.keySet()) {
 
@@ -167,11 +175,6 @@ public class ServerRTPSocket {
 						System.out.println("interrupted");
 					}*/
 					ConcurrentLinkedQueue<byte[]> stuffToSend = rtpSocket.dataOutQueue;
-					if (stuffToSend.size() > 0) {
-						System.out.println("-----------------\n\n");
-						System.out.println("something to send");
-						System.out.println("------------------");
-					}
 					while (stuffToSend.size() > 0) { //could have some issues with dominating the connection if the queue is constantly populated
 						byte[] sendBytes = stuffToSend.poll();
 

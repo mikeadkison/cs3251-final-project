@@ -10,6 +10,7 @@ public class ClientThread extends Thread {
 	private static final String ENCODING = "ISO-8859-1";
 	private final List<JSONObject> bufferList; //buffer used to hold packets until they can be sent to application
 	long highestSeqNumGivenToApplication = -1;
+	private static final int TIMEOUT = 50; //50 ms receive timeout
 	
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
 		this.socket = socket;
@@ -21,7 +22,9 @@ public class ClientThread extends Thread {
 	public void run() {
 		System.out.println("client thread started");
 		//where the work of the thread gets done
+
 		while (true) {
+
 			while (rtpSocket.dataOutQueue.size() > 0) { //could have some issues with dominating the connection if the queue is constantly populated
 				byte[] sendBytes = rtpSocket.dataOutQueue.poll();
 
@@ -49,28 +52,34 @@ public class ClientThread extends Thread {
 			}
 
 			//receive data
+			boolean receivedSomething = true;
 			byte[] rcvdBytes = new byte[1000];
 			DatagramPacket rcvPkt = new DatagramPacket(rcvdBytes, rcvdBytes.length);
 			try {
+				socket.setSoTimeout(TIMEOUT);
 				socket.receive(rcvPkt);
+			} catch (SocketTimeoutException e) {
+				receivedSomething = false;
 			} catch (IOException e) {
 				System.out.println("issue receiving on socket" + socket);
-				System.exit(0);
-			}
-			String rcvdString = null;
-			try {
-				rcvdString = new String(rcvPkt.getData(), ENCODING);
-			} catch (UnsupportedEncodingException e) {
-				System.out.println("unsupported encoding while decoding udp message");
-				System.exit(-1);
 			}
 
-			rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
-			JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
+			if (receivedSomething) {
+				String rcvdString = null;
+				try {
+					rcvdString = new String(rcvPkt.getData(), ENCODING);
+				} catch (UnsupportedEncodingException e) {
+					System.out.println("unsupported encoding while decoding udp message");
+					System.exit(-1);
+				}
 
-			if (received.get("type").equals("data")) {
-				bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-				updateDataToAppQueue(); //give the applications a chunk of data if you can
+				rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
+				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
+
+				if (received.get("type").equals("data")) {
+					bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+					updateDataToAppQueue(); //give the applications a chunk of data if you can
+				}
 			}
 		}
 	}
