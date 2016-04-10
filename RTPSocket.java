@@ -9,11 +9,17 @@ public class RTPSocket {
 	protected ConcurrentLinkedQueue<byte[]> dataInQueue; //the queue that holds data ready to be read
 	protected ConcurrentLinkedQueue<byte[]> dataOutQueue; //the queue where the api puts data that it wants sent out
 	protected int seqNum;
+	protected long rcvWinSize; //the current size of the window (the buffer)
+	private long maxRcvWinSize; //the biggest the window can get
+	protected long peerWinSize; //the window size of the host you are connected to
 
-	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue) {
+	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
 		this(IP, UDPport);
 		this.dataInQueue = dataInQueue;
 		this.dataOutQueue = dataOutQueue;
+		this.maxRcvWinSize = maxRcvWinSize;
+		rcvWinSize = maxRcvWinSize;
+		this.peerWinSize = peerWinSize;
 		seqNum = 0;
 	}
 

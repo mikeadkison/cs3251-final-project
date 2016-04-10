@@ -12,12 +12,14 @@ public class ClientRTPSocket {
 	private InetAddress serverIPAddress;
 	private int serverUDPPort;
 	DatagramSocket socket;
+	long maxWinSize; //max window size in packets
 	int seqNum;
 
-	public ClientRTPSocket(InetAddress IPAddress, int UDPport) {
+	public ClientRTPSocket(InetAddress IPAddress, int UDPport, long maxWinSize) {
 		this.serverIPAddress = IPAddress;
 		this.serverUDPPort = UDPport;
 		this.seqNum = 0;
+		this.maxWinSize = maxWinSize;
 	}
 
 	public RTPSocket connect() {
@@ -58,7 +60,9 @@ public class ClientRTPSocket {
 			ConcurrentLinkedQueue<byte[]> dataInQueue = new ConcurrentLinkedQueue<>();
 			ConcurrentLinkedQueue<byte[]> dataOutQueue = new ConcurrentLinkedQueue<>();
 			
-			RTPSocket rtpSocket = new RTPSocket(serverIPAddress, serverUDPPort, dataInQueue, dataOutQueue);
+			long peerWinSize = (Long) received.get("winSize");
+
+			RTPSocket rtpSocket = new RTPSocket(serverIPAddress, serverUDPPort, dataInQueue, dataOutQueue, maxWinSize, peerWinSize);
 			ClientThread clientThread = new ClientThread(socket, rtpSocket);
 			clientThread.start();
 			return rtpSocket;
@@ -93,6 +97,8 @@ public class ClientRTPSocket {
 		// connection initiation section
 		JSONObject handshakeMsg = new JSONObject();
 		handshakeMsg.put("type", type);
+		handshakeMsg.put("winSize", maxWinSize);
+		System.out.println(handshakeMsg);
 		DatagramPacket handshakePacket = jsonToPacket(handshakeMsg);
 
 		return handshakePacket;

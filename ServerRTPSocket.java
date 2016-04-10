@@ -10,10 +10,12 @@ public class ServerRTPSocket {
 	private static RTPSocket readerSocket; //will be created by the server thread when accept is called
 	private static Object lock = new Object();
 	private static final int TIMEOUT = 50; //50 ms receive timeout
+	private static long maxWinSize; //the maximum receive window size in packets
 
 
-	public ServerRTPSocket(int UDPport) {
+	public ServerRTPSocket(int UDPport, long maxWinSize) {
 		DatagramSocket socket = null;
+		this.maxWinSize = maxWinSize;
 		msgsForThread = new ConcurrentLinkedQueue<>();
 		try {
 			socket = new DatagramSocket(UDPport);
@@ -60,6 +62,7 @@ public class ServerRTPSocket {
 		private InetAddress connReqAddr; //address of client requesting a connection
 		private int connReqPort; //port of client requesting a connection
 		private Map<RTPSocket, Queues> clientToBufferMap;
+		long peerWinSize; //the window size of the peer who we are currently setting up a connection to
 		
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {
@@ -114,6 +117,7 @@ public class ServerRTPSocket {
 						acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
 						connReqAddr = rcvPkt.getAddress();
 						connReqPort = rcvPkt.getPort();
+						peerWinSize = (Long) received.get("winSize");
 
 					} else if (received.get("type").equals("initConnectionConfirmAck") //received last part of 3-way handshake
 								&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
@@ -134,6 +138,8 @@ public class ServerRTPSocket {
 						//responding to connection request
 						JSONObject connReqRespMsgJSON = new JSONObject();
 						connReqRespMsgJSON.put("type", "initConnectionConfirm");
+						connReqRespMsgJSON.put("winSize", maxWinSize);
+						System.out.println(connReqRespMsgJSON);
 						byte[] connReqRespBytes = null;
 						try {
 							connReqRespBytes = (connReqRespMsgJSON.toString() + "\n").getBytes(ENCODING);
@@ -156,7 +162,7 @@ public class ServerRTPSocket {
 						//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 						acceptStatus = null;
 						Queues clientQueues = new Queues();
-						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.dataToAppQueue, clientQueues.dataFromAppQueue);
+						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.dataToAppQueue, clientQueues.dataFromAppQueue, maxWinSize, peerWinSize);
 						clientToBufferMap.put(socketForClient, clientQueues);
 						synchronized(lock) {
 							readerSocket = socketForClient;

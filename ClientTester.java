@@ -3,7 +3,7 @@ import java.net.*;
 import java.util.*;
 
 public class ClientTester {
-	private static final String BIG_STRING = new String(new char[500]).replace("\0", "-");
+	private static final String BIG_STRING = new String(new char[502]).replace("\0", "-");
 	private static final String ENCODING = "ISO-8859-1";
 
 	public static void main(String[] args) {
@@ -15,7 +15,7 @@ public class ClientTester {
         }
 
 
-		RTPSocket clientSocket = (new ClientRTPSocket(addr, 8081)).connect();
+		RTPSocket clientSocket = (new ClientRTPSocket(addr, 8081, 5)).connect();
 
 
 
