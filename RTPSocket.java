@@ -13,10 +13,11 @@ public class RTPSocket {
 	protected long rcvWinSize; //the current size of the window (the buffer)
 	private long maxRcvWinSize; //the biggest the window can get
 	protected long peerWinSize; //the window size of the host you are connected to
-	protected long unAckedPackets;
 	protected final List<JSONObject> bufferList = new LinkedList<>();;
 	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
+	protected final List<JSONObject> unAckedPackets = new ArrayList<>();
+	protected long highestSeqNumAcked;
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
 		this(IP, UDPport);
@@ -27,6 +28,7 @@ public class RTPSocket {
 		this.peerWinSize = peerWinSize;
 		seqNum = 0;
 		highestSeqNumGivenToApplication = -1;
+		highestSeqNumAcked = -1;
 	}
 
 	/**
@@ -120,27 +122,48 @@ public class RTPSocket {
 	}
 
 	/**
-	 * get the highest seqnum that will fit in the buffer, which is also the highest seqnum that will be ACKed
+	 * get the highest seqnum that will fit in the buffer of this socket, which is also the highest seqnum that will be ACKed
 	 *
 	 * if a packet is received with a higher seqNum than this, it should not be put in the buffer or ACKed
 	 */
-	protected long getHighestAcceptableSeqNum() {
-		return getLowestSeqNumInBuffer() + rcvWinSize - 1;
+	protected long getHighestAcceptableRcvSeqNum() {
+		long lowestSeqNumInBuffer = getLowestSeqNumInList(bufferList);
+		if (-1 == lowestSeqNumInBuffer) {
+			lowestSeqNumInBuffer = highestSeqNumGivenToApplication + 1; //if there is nothing in the buffer, then the lowest sequence number that could be in the buffer in the future is = highest seq num given to application in queue + 1
+		}
+		return lowestSeqNumInBuffer + rcvWinSize - 1;
+	}
+
+	/**
+	 * get the highest seqnum that the peer (remote host) is probably able to fit in its buffer
+	 *
+	 * data that would go in a packet with a seqNum > this should not be taken out of the socket's dataOutQueue
+	 */
+	protected long getHighestAcceptableRemoteNum() {
+		long lowestSeqNumUnacked = getLowestSeqNumInList(unAckedPackets);
+		if (-1 == lowestSeqNumUnacked) {
+			lowestSeqNumUnacked = highestSeqNumAcked + 1; //if there are no unacked packets then every seqNum before and including the highest seqNum has been acked
+			                                              // the highestSeqNumAcked variable keeps track of what seqNums the remote buffer is able to hold even when every packet we've sent has been acked and
+			                                              // forgotten about
+		}
+		return lowestSeqNumUnacked + peerWinSize - 1;
 	}
 
 	/**
 	 * get the lowest sequence number in the buffer for received packets
 	 *
 	 * useful for figuring out the largest packet sequence number that you can accept
+	 *
+	 * @return -1 if nothing in list
 	 */
-	private long getLowestSeqNumInBuffer() {
-		if (bufferList.size() == 0) {
-			return highestSeqNumGivenToApplication + 1; //if there is nothing in the buffer, then the lowest sequence number that could be in the buffer in the future is = highest seq num given to application in queue + 1
+	private long getLowestSeqNumInList(List<JSONObject> list) {
+		if (list.size() == 0) {
+			return -1;
 		}
 
-		long lowestSeqNum = ((Number) bufferList.get(0).get("seqNum")).longValue();
-		for (int i = 1; i < bufferList.size(); i++) {
-			long seqNum = ((Number) bufferList.get(i).get("seqNum")).longValue();
+		long lowestSeqNum = ((Number) list.get(0).get("seqNum")).longValue();
+		for (int i = 1; i < list.size(); i++) {
+			long seqNum = ((Number) list.get(i).get("seqNum")).longValue();
 			if (seqNum < lowestSeqNum) {
 				lowestSeqNum = seqNum;
 			}
