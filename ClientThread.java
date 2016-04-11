@@ -10,6 +10,7 @@ public class ClientThread extends Thread {
 	private static final String ENCODING = "ISO-8859-1";
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
+	private static final int ACK_TIMEOUT = 500; //how long to wait for ACK before resending in ms
 	
 	
 	
@@ -67,6 +68,20 @@ public class ClientThread extends Thread {
 					rtpSocket.unAckedPktToTimeSentMap.put(packetJSON, System.currentTimeMillis());
 				} else { //the sequence number of this packet would be too high for the remote's buffer. Stop trying to send data after this iteration
 					seqNumsTooHigh = true;
+				}
+			}
+
+			//resend unacked packets which have timed out
+			for (JSONObject packetJSON: rtpSocket.unAckedPktToTimeSentMap.keySet()) {
+				long timeSent = rtpSocket.unAckedPktToTimeSentMap.get(packetJSON);
+				if (System.currentTimeMillis() - timeSent > ACK_TIMEOUT) { //ack not received in time, so resend
+					DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
+					try {
+						socket.send(sndPkt);
+					} catch (IOException e) {
+						System.out.println("issue sending packet");
+					}
+					rtpSocket.unAckedPktToTimeSentMap.put(packetJSON, System.currentTimeMillis());
 				}
 			}
 
