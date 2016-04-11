@@ -6,7 +6,7 @@ import org.json.simple.*;
 
 public class RTPSocket {
 	protected InetAddress IP; //ip of peer
-	protected int UDPport; //porrt of peer
+	protected int UDPport; //port of peer
 	protected ConcurrentLinkedQueue<byte[]> dataInQueue; //the queue that holds data ready to be read
 	protected ConcurrentLinkedQueue<byte[]> dataOutQueue; //the queue where the api puts data that it wants sent out
 	protected int seqNum;
@@ -17,6 +17,7 @@ public class RTPSocket {
 	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
 	protected final List<JSONObject> unAckedPackets = new ArrayList<>();
+	protected final Map<JSONObject, Long> unAckedPktToTimeSentMap = new HashMap<>();
 	protected long highestSeqNumAcked; //highest seq num that we've sent that we received an ack for from our peer
 	protected int totalBytesSent;
 

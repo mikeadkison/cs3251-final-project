@@ -126,7 +126,7 @@ public class ServerRTPSocket {
 
 					} else if (received.get("type").equals("data")) {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
-						
+
 						if (((Number) received.get("seqNum")).longValue() <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
 							rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 							rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
@@ -244,12 +244,13 @@ public class ServerRTPSocket {
 							DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
 							try {
 								socket.send(sndPkt);
-								rtpSocket.unAckedPackets.add(packetJSON);
 								System.out.println("# of unacked packets increased to: " + rtpSocket.unAckedPackets.size());
 								System.out.println("sent: " + dataAsString);
 							} catch (IOException e) {
 								System.out.println("issue sending packet");
 							}
+							rtpSocket.unAckedPackets.add(packetJSON);
+							rtpSocket.unAckedPktToTimeSentMap.put(packetJSON, System.currentTimeMillis());
 						} else { //the sequence number of this packet would be too high for the remote's buffer. Stop trying to send data after this iteration
 							seqNumsTooHigh = true;
 						}

@@ -58,12 +58,13 @@ public class ClientThread extends Thread {
 					DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
 					try {
 						socket.send(sndPkt);
-						rtpSocket.unAckedPackets.add(packetJSON);
 						System.out.println("# of unacked packets increased to: " + rtpSocket.unAckedPackets.size());
 						System.out.println("sent: " + dataAsString);
 					} catch (IOException e) {
 						System.out.println("issue sending packet");
 					}
+					rtpSocket.unAckedPackets.add(packetJSON);
+					rtpSocket.unAckedPktToTimeSentMap.put(packetJSON, System.currentTimeMillis());
 				} else { //the sequence number of this packet would be too high for the remote's buffer. Stop trying to send data after this iteration
 					seqNumsTooHigh = true;
 				}
@@ -106,11 +107,11 @@ public class ClientThread extends Thread {
 						ackJSON.put("seqNum",  received.get("seqNum"));
 
 						
-						try {
+						/*try {
 							socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
 						} catch (IOException e) {
 							System.out.println("issue sending ACK");
-						}
+						}*/
 					} else {
 						System.out.println("had to reject a packet since it wouldn't fit in buffer");
 					}
