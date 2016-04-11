@@ -17,7 +17,7 @@ public class RTPSocket {
 	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
 	protected final List<JSONObject> unAckedPackets = new ArrayList<>();
-	protected long highestSeqNumAcked;
+	protected long highestSeqNumAcked; //highest seq num that we've sent that we received an ack for from our peer
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
 		this(IP, UDPport);
@@ -139,7 +139,7 @@ public class RTPSocket {
 	 *
 	 * data that would go in a packet with a seqNum > this should not be taken out of the socket's dataOutQueue
 	 */
-	protected long getHighestAcceptableRemoteNum() {
+	protected long getHighestAcceptableRemoteSeqNum() {
 		long lowestSeqNumUnacked = getLowestSeqNumInList(unAckedPackets);
 		if (-1 == lowestSeqNumUnacked) {
 			lowestSeqNumUnacked = highestSeqNumAcked + 1; //if there are no unacked packets then every seqNum before and including the highest seqNum has been acked

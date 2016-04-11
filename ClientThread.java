@@ -10,6 +10,7 @@ public class ClientThread extends Thread {
 	private static final String ENCODING = "ISO-8859-1";
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
+	private int totalBytesSent;
 	
 	
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
@@ -26,13 +27,19 @@ public class ClientThread extends Thread {
 
 			//send data
 			Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
-			long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRcvSeqNum(); //the highest sequence number that can fit in the remote's buffer
+			long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer
 			boolean seqNumsTooHigh = false; //stop trying to send data once we have too many unacked packets
 			while (dataOutQueueItr.hasNext() && !seqNumsTooHigh) { //could have some issues with dominating the connection if the queue is constantly populated
-				int seqNum = rtpSocket.seqNum + 1;
+				int seqNum = rtpSocket.seqNum;
 
 				if (seqNum <= highestAllowableSeqNum) {
 					byte[] sendBytes = dataOutQueueItr.next();
+					totalBytesSent += sendBytes.length;
+					System.out.println("-----------");
+					System.out.println("highestAllowableSeqNum: " + highestAllowableSeqNum);
+					System.out.println("max peer win size: " + rtpSocket.peerWinSize);
+					System.out.println("sent " + totalBytesSent + " total bytes");
+					System.out.println("highestSeqNumAcked by peer: " + rtpSocket.highestSeqNumAcked);
 					dataOutQueueItr.remove();
 					//put the data in a packet and send it
 					String dataAsString = null;
@@ -98,11 +105,7 @@ public class ClientThread extends Thread {
 						ackJSON.put("type", "ACK");
 						ackJSON.put("seqNum",  received.get("seqNum"));
 
-						long seqNum = ((Number) received.get("seqNum")).longValue();
-						if (seqNum > rtpSocket.highestSeqNumAcked) {
-							rtpSocket.highestSeqNumAcked = seqNum;
-						}
-
+						
 						try {
 							socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
 						} catch (IOException e) {
@@ -125,6 +128,12 @@ public class ClientThread extends Thread {
 							break;
 						}
 					}
+
+					long seqNum = ((Number) received.get("seqNum")).longValue();
+					if (seqNum > rtpSocket.highestSeqNumAcked) {
+						rtpSocket.highestSeqNumAcked = seqNum;
+					}
+
 				}
 			}
 		}
