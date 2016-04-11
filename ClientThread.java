@@ -8,7 +8,6 @@ public class ClientThread extends Thread {
 	private DatagramSocket socket;
 	private RTPSocket rtpSocket;
 	private static final String ENCODING = "ISO-8859-1";
-	private final List<JSONObject> bufferList; //buffer used to hold packets until they can be sent to application
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
 	private final List<JSONObject> unAckedPackets = new ArrayList<>();
@@ -16,7 +15,6 @@ public class ClientThread extends Thread {
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
 		this.socket = socket;
 		this.rtpSocket = rtpSocket;
-		bufferList = new ArrayList<>();
 
 	}
 
@@ -80,8 +78,8 @@ public class ClientThread extends Thread {
 				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
 
 				if (received.get("type").equals("data")) {
-					bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-					updateDataToAppQueue(); //give the applications a chunk of data if you can
+					rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+					rtpSocket.updateDataToAppQueue(); //give the applications a chunk of data if you can
 
 					// ack the received packet
 					System.out.println("received: " + received + ", ACKing");
@@ -118,9 +116,9 @@ public class ClientThread extends Thread {
 	 * useful for figuring out the largest packet sequence number that you can accept
 	 */
 	private long getLowestSeqNumInBuffer() {
-		long lowestSeqNum = ((Number) bufferList.get(0).get("seqNum")).longValue();
-		for (int i = 1; i < bufferList.size(); i++) {
-			long seqNum = ((Number) bufferList.get(i).get("seqNum")).longValue();
+		long lowestSeqNum = ((Number) rtpSocket.bufferList.get(0).get("seqNum")).longValue();
+		for (int i = 1; i < rtpSocket.bufferList.size(); i++) {
+			long seqNum = ((Number) rtpSocket.bufferList.get(i).get("seqNum")).longValue();
 			if (seqNum < lowestSeqNum) {
 				lowestSeqNum = seqNum;
 			}
@@ -140,36 +138,4 @@ public class ClientThread extends Thread {
 		return packet;
 	}
 
-	/**
-	 * look at the buffer and see what can be given to the application and put that in the dataInQueue
-	 */
-	private void updateDataToAppQueue() {
-		long seqNum = highestSeqNumGivenToApplication + 1;
-		boolean miss = false;
-		while (!miss) { //while the packet with the next seqNum can be found in the buffer:
-			for (int i = 0; i < bufferList.size(); i++) {
-				JSONObject packet = bufferList.get(i);
-				if ((Long) packet.get("seqNum") == seqNum) {
-					String dataStr = (String) packet.get("data");
-					byte[] dataBytes = null;
-					try {
-						dataBytes = dataStr.getBytes(ENCODING);
-					} catch (UnsupportedEncodingException e) {
-						System.out.println("unsupported encoding");
-						System.exit(-1);
-					}
-					System.out.println("datainqueue now contains: " + dataStr);
-					rtpSocket.dataInQueue.add(dataBytes);
-					bufferList.remove(packet);
-					i--;
-					highestSeqNumGivenToApplication = seqNum;
-					miss = false;
-					System.out.println("added seqNum " + seqNum + " to application queue with size " + dataBytes.length);
-					System.out.println("dataInQueueSize: " + rtpSocket.dataInQueue.size());
-					continue;
-				}
-			}
-			miss = true;
-		}
-	}
 }
