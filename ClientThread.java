@@ -78,18 +78,22 @@ public class ClientThread extends Thread {
 				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
 
 				if (received.get("type").equals("data")) {
-					rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-					rtpSocket.updateDataToAppQueue(); //give the applications a chunk of data if you can
+					if (((Number) received.get("seqNum")).longValue() <= rtpSocket.getHighestAcceptableSeqNum()) { //check if packet fits in buffer (rceive window)
+						rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+						rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 
-					// ack the received packet
-					System.out.println("received: " + received + ", ACKing");
-					JSONObject ackJSON = new JSONObject();
-					ackJSON.put("type", "ACK");
-					ackJSON.put("seqNum",  received.get("seqNum"));
-					try {
-						socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
-					} catch (IOException e) {
-						System.out.println("issue sending ACK");
+						// ack the received packet
+						System.out.println("received: " + received + ", ACKing");
+						JSONObject ackJSON = new JSONObject();
+						ackJSON.put("type", "ACK");
+						ackJSON.put("seqNum",  received.get("seqNum"));
+						try {
+							socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
+						} catch (IOException e) {
+							System.out.println("issue sending ACK");
+						}
+					} else {
+						System.out.println("had to reject a packet since it wouldn't fit in buffer");
 					}
 				} else if (received.get("type").equals("ACK")) {
 					System.out.println("got an ack: " + received);
@@ -110,21 +114,7 @@ public class ClientThread extends Thread {
 		}
 	}
 
-	/**
-	 * get the lowest sequence number in the buffer for received packets
-	 *
-	 * useful for figuring out the largest packet sequence number that you can accept
-	 */
-	private long getLowestSeqNumInBuffer() {
-		long lowestSeqNum = ((Number) rtpSocket.bufferList.get(0).get("seqNum")).longValue();
-		for (int i = 1; i < rtpSocket.bufferList.size(); i++) {
-			long seqNum = ((Number) rtpSocket.bufferList.get(i).get("seqNum")).longValue();
-			if (seqNum < lowestSeqNum) {
-				lowestSeqNum = seqNum;
-			}
-		}
-		return lowestSeqNum;
-	}
+	
 
 	private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {
 		byte[] bytes = null;

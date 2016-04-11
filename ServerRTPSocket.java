@@ -127,7 +127,7 @@ public class ServerRTPSocket {
 					} else if (received.get("type").equals("data")) {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(connReqAddr, connReqPort)));
 						rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-						rtpSocket.updateDataToAppQueue(); //put a chunk of data into a place where application can read it if you can
+						rtpSocket.transferBufferToDataInQueue(); //put a chunk of data into a place where application can read it if you can
 
 						// ack the received packet
 						System.out.println("received: " + received + ", ACKing");

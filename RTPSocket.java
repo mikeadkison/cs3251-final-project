@@ -15,7 +15,7 @@ public class RTPSocket {
 	protected long peerWinSize; //the window size of the host you are connected to
 	protected long unAckedPackets;
 	protected final List<JSONObject> bufferList = new LinkedList<>();;
-	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored
+	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
@@ -93,7 +93,7 @@ public class RTPSocket {
 	/**
 	 * look at the buffer and see what can be given to the application and put that in the dataInQueue
 	 */
-	protected void updateDataToAppQueue() {
+	protected void transferBufferToDataInQueue() {
 		long seqNum = highestSeqNumGivenToApplication + 1;
 		boolean miss = false;
 		while (!miss) { //while the packet with the next seqNum can be found in the buffer:
@@ -117,5 +117,34 @@ public class RTPSocket {
 			}
 			miss = true;
 		}
+	}
+
+	/**
+	 * get the highest seqnum that will fit in the buffer, which is also the highest seqnum that will be ACKed
+	 *
+	 * if a packet is received with a higher seqNum than this, it should not be put in the buffer or ACKed
+	 */
+	protected long getHighestAcceptableSeqNum() {
+		return getLowestSeqNumInBuffer() + rcvWinSize - 1;
+	}
+
+	/**
+	 * get the lowest sequence number in the buffer for received packets
+	 *
+	 * useful for figuring out the largest packet sequence number that you can accept
+	 */
+	private long getLowestSeqNumInBuffer() {
+		if (bufferList.size() == 0) {
+			return highestSeqNumGivenToApplication + 1; //if there is nothing in the buffer, then the lowest sequence number that could be in the buffer in the future is = highest seq num given to application in queue + 1
+		}
+
+		long lowestSeqNum = ((Number) bufferList.get(0).get("seqNum")).longValue();
+		for (int i = 1; i < bufferList.size(); i++) {
+			long seqNum = ((Number) bufferList.get(i).get("seqNum")).longValue();
+			if (seqNum < lowestSeqNum) {
+				lowestSeqNum = seqNum;
+			}
+		}
+		return lowestSeqNum;
 	}
 }
