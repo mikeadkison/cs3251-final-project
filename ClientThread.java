@@ -112,8 +112,20 @@ public class ClientThread extends Thread {
 		}
 	}
 
-	private int getLargestSeqNumThatCanBeSent(List<JSONObject> unAckedPackets, int winWize) {
-		return 0;
+	/**
+	 * get the lowest sequence number in the buffer for received packets
+	 *
+	 * useful for figuring out the largest packet sequence number that you can accept
+	 */
+	private long getLowestSeqNumInBuffer() {
+		long lowestSeqNum = ((Number) bufferList.get(0).get("seqNum")).longValue();
+		for (int i = 1; i < bufferList.size(); i++) {
+			long seqNum = ((Number) bufferList.get(i).get("seqNum")).longValue();
+			if (seqNum < lowestSeqNum) {
+				lowestSeqNum = seqNum;
+			}
+		}
+		return lowestSeqNum;
 	}
 
 	private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {

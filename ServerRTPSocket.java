@@ -61,7 +61,7 @@ public class ServerRTPSocket {
 		private AcceptStatus acceptStatus;
 		private InetAddress connReqAddr; //address of client requesting a connection
 		private int connReqPort; //port of client requesting a connection
-		private Map<RTPSocket, Queues> clientToBufferMap;
+		private List<RTPSocket> rtpSockets;
 		long peerWinSize; //the window size of the peer who we are currently setting up a connection to
 		
 
@@ -70,7 +70,7 @@ public class ServerRTPSocket {
 			this.msgs = msgs;
 
 			acceptStatus = null;
-			clientToBufferMap = new HashMap<>();
+			rtpSockets = new ArrayList<>();
 		}
 
 		public void run() {
@@ -125,9 +125,9 @@ public class ServerRTPSocket {
 						acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
 
 					} else if (received.get("type").equals("data")) {
-						Queues queues = clientToBufferMap.get(new RTPSocket(connReqAddr, connReqPort));
-						queues.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-						queues.updateDataToAppQueue(); //give the applications a chunk of data if you can
+						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(connReqAddr, connReqPort)));
+						rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+						rtpSocket.updateDataToAppQueue(); //put a chunk of data into a place where application can read it if you can
 
 						// ack the received packet
 						System.out.println("received: " + received + ", ACKing");
@@ -171,9 +171,8 @@ public class ServerRTPSocket {
 						System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
 						//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 						acceptStatus = null;
-						Queues clientQueues = new Queues();
-						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, clientQueues.dataToAppQueue, clientQueues.dataFromAppQueue, maxWinSize, peerWinSize);
-						clientToBufferMap.put(socketForClient, clientQueues);
+						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedQueue<>(), new ConcurrentLinkedQueue<>(), maxWinSize, peerWinSize);
+						rtpSockets.add(socketForClient);
 						synchronized(lock) {
 							readerSocket = socketForClient;
 							lock.notify();
@@ -183,7 +182,7 @@ public class ServerRTPSocket {
 
 
 				//for every RTPSocket, send stuff the socket wants to send (to clients)
-				for (RTPSocket rtpSocket: clientToBufferMap.keySet()) {
+				for (RTPSocket rtpSocket: rtpSockets) {
 
 /*					try {
 						sleep(0);
@@ -232,54 +231,6 @@ public class ServerRTPSocket {
 			return packet;
 		}
 
-		/**
-		 * contains three queues
-		 * the first queue is size-limited - it serves as the packet buffer for each client
-		 * the second queue will contain in-order data which is ready for the application to consume via the api
-		 *
-		 * the second queue will be derived from the first
-		 *
-		 * the third queue contains data that the api has been asked by the application to send out
-		 */
-		private class Queues {
-			private final List<JSONObject> bufferList = new LinkedList<>(); //the first queue (see above)
-			private final ConcurrentLinkedQueue<byte[]> dataToAppQueue = new ConcurrentLinkedQueue<>(); //contains in-order data ready for api to put together for application
-			private final ConcurrentLinkedQueue<byte[]> dataFromAppQueue = new ConcurrentLinkedQueue<>(); //contains data which the application wants sent. The data will already be sized properly for packets
-			private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored
-
-			public Queues() {
-				highestSeqNumGivenToApplication = -1; //nothing has been given to application yet
-			}
-
-			/**
-			 * look at the buffer and see what can be given to the application and put that in the dataToAppQueue
-			 */
-			private void updateDataToAppQueue() {
-				long seqNum = highestSeqNumGivenToApplication + 1;
-				boolean miss = false;
-				while (!miss) { //while the packet with the next seqNum can be found in the buffer:
-					for (JSONObject packet: bufferList) {
-						if ((Long) packet.get("seqNum") == seqNum) {
-							String dataStr = (String) packet.get("data");
-							byte[] dataBytes = null;
-							try {
-								dataBytes = dataStr.getBytes(ENCODING);
-							} catch (UnsupportedEncodingException e) {
-								System.out.println("unsupported encoding");
-								System.exit(-1);
-							}
-							dataToAppQueue.add(dataBytes);
-							bufferList.remove(packet);
-							highestSeqNumGivenToApplication = seqNum;
-							miss = false;
-							System.out.println("added seqNum " + seqNum + " to application in queue with size " + dataBytes.length);
-							continue;
-						}
-					}
-					miss = true;
-				}
-			}
-		}
 	}
 
 	private class Msg {

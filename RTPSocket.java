@@ -2,6 +2,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+import org.json.simple.*;
 
 public class RTPSocket {
 	protected InetAddress IP; //ip of peer
@@ -13,6 +14,9 @@ public class RTPSocket {
 	private long maxRcvWinSize; //the biggest the window can get
 	protected long peerWinSize; //the window size of the host you are connected to
 	protected long unAckedPackets;
+	protected final List<JSONObject> bufferList = new LinkedList<>();;
+	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored
+	private static final String ENCODING = "ISO-8859-1";
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
 		this(IP, UDPport);
@@ -22,6 +26,7 @@ public class RTPSocket {
 		rcvWinSize = maxRcvWinSize;
 		this.peerWinSize = peerWinSize;
 		seqNum = 0;
+		highestSeqNumGivenToApplication = -1;
 	}
 
 	/**
@@ -83,5 +88,34 @@ public class RTPSocket {
 	@Override
 	public int hashCode() {
 		return this.IP.hashCode() + this.UDPport * 13;
+	}
+
+	/**
+	 * look at the buffer and see what can be given to the application and put that in the dataInQueue
+	 */
+	protected void updateDataToAppQueue() {
+		long seqNum = highestSeqNumGivenToApplication + 1;
+		boolean miss = false;
+		while (!miss) { //while the packet with the next seqNum can be found in the buffer:
+			for (JSONObject packet: bufferList) {
+				if ((Long) packet.get("seqNum") == seqNum) {
+					String dataStr = (String) packet.get("data");
+					byte[] dataBytes = null;
+					try {
+						dataBytes = dataStr.getBytes(ENCODING);
+					} catch (UnsupportedEncodingException e) {
+						System.out.println("unsupported encoding");
+						System.exit(-1);
+					}
+					dataInQueue.add(dataBytes);
+					bufferList.remove(packet);
+					highestSeqNumGivenToApplication = seqNum;
+					miss = false;
+					System.out.println("added seqNum " + seqNum + " to application in queue with size " + dataBytes.length);
+					continue;
+				}
+			}
+			miss = true;
+		}
 	}
 }
