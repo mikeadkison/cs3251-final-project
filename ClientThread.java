@@ -11,6 +11,7 @@ public class ClientThread extends Thread {
 	private final List<JSONObject> bufferList; //buffer used to hold packets until they can be sent to application
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
+	private final List<JSONObject> unAckedPackets = new ArrayList<>();
 	
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
 		this.socket = socket;
@@ -45,6 +46,8 @@ public class ClientThread extends Thread {
 				DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
 				try {
 					socket.send(sndPkt);
+					unAckedPackets.add(packetJSON);
+					System.out.println("# of unacked packets increased to: " + unAckedPackets.size());
 					System.out.println("sent: " + dataAsString);
 				} catch (IOException e) {
 					System.out.println("issue sending packet");
@@ -90,9 +93,27 @@ public class ClientThread extends Thread {
 					} catch (IOException e) {
 						System.out.println("issue sending ACK");
 					}
+				} else if (received.get("type").equals("ACK")) {
+					System.out.println("got an ack: " + received);
+					//stop caring about packets once they are ACKed
+					Iterator<JSONObject> pListIter = unAckedPackets.iterator();
+					while (pListIter.hasNext()) {
+						JSONObject packet = pListIter.next();
+						System.out.println("packet seqNum: " + packet.get("seqNum"));
+						System.out.println("ack seqNum: " + received.get("seqNum"));
+						if (((Number) packet.get("seqNum")).longValue() == ((Number) received.get("seqNum")).longValue()) {
+							pListIter.remove();
+							System.out.println("# of unacked packets decreased to: " + unAckedPackets.size());
+							break;
+						}
+					}
 				}
 			}
 		}
+	}
+
+	private int getLargestSeqNumThatCanBeSent(List<JSONObject> unAckedPackets, int winWize) {
+		return 0;
 	}
 
 	private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {
