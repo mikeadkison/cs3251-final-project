@@ -10,7 +10,7 @@ public class ClientThread extends Thread {
 	private static final String ENCODING = "ISO-8859-1";
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
-	private int totalBytesSent;
+	
 	
 	
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
@@ -34,11 +34,11 @@ public class ClientThread extends Thread {
 
 				if (seqNum <= highestAllowableSeqNum) {
 					byte[] sendBytes = dataOutQueueItr.next();
-					totalBytesSent += sendBytes.length;
+					rtpSocket.totalBytesSent += sendBytes.length;
 					System.out.println("-----------");
 					System.out.println("highestAllowableSeqNum: " + highestAllowableSeqNum);
 					System.out.println("max peer win size: " + rtpSocket.peerWinSize);
-					System.out.println("sent " + totalBytesSent + " total bytes");
+					System.out.println("sent " + rtpSocket.totalBytesSent + " total bytes");
 					System.out.println("highestSeqNumAcked by peer: " + rtpSocket.highestSeqNumAcked);
 					dataOutQueueItr.remove();
 					//put the data in a packet and send it

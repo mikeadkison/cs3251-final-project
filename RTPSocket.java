@@ -18,6 +18,7 @@ public class RTPSocket {
 	private static final String ENCODING = "ISO-8859-1";
 	protected final List<JSONObject> unAckedPackets = new ArrayList<>();
 	protected long highestSeqNumAcked; //highest seq num that we've sent that we received an ack for from our peer
+	protected int totalBytesSent;
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
 		this(IP, UDPport);
