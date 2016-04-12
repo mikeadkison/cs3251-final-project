@@ -3,6 +3,7 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 import org.json.simple.*;
+import java.security.*;
 
 public class ClientThread extends Thread {
 	private DatagramSocket socket;
@@ -11,7 +12,7 @@ public class ClientThread extends Thread {
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
 	private static final int ACK_TIMEOUT = 500; //how long to wait for ACK before resending in ms
-	
+	private static final int CHECKSUM_SIZE = 16; //length of checksum in bytes
 	
 	
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
@@ -49,7 +50,7 @@ public class ClientThread extends Thread {
 					} catch (UnsupportedEncodingException e) {
 						System.out.println ("issue encoding");
 					}
-					
+
 					JSONObject packetJSON = new JSONObject();
 					packetJSON.put("type", "data");
 					packetJSON.put("data", dataAsString);
@@ -155,7 +156,40 @@ public class ClientThread extends Thread {
 		}
 	}
 
-	
+    private byte[] combine(byte[] checksum, byte[] message) {
+        byte[] combined = new byte[checksum.length + message.length];
+        System.arraycopy(checksum, 0, combined, 0, checksum.length); //place checksum at beginning of packet
+        System.arraycopy(message, 0, combined, checksum.length, message.length); //place rest of packet (which is in JSON format) after the checksum
+        return combined;
+    }
+
+    private byte[] getChecksum(byte[] packet) {
+        byte[] checksum = new byte[CHECKSUM_SIZE];
+        System.arraycopy(packet, 0, checksum, 0, CHECKSUM_SIZE);
+        return checksum;
+    }
+
+    private byte[] getMessage(byte[] packet) {
+        int messageSize = packet.length - CHECKSUM_SIZE;
+        byte[] message = new byte[messageSize];
+        return message;
+    }
+
+    /**
+     * @return 16 byte MD5 checksum of given bytes
+     */
+    private byte[] checksum(byte[] messageBytes) {
+        MessageDigest msgDigest = null;
+        try {
+            msgDigest = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            System.out.println("md5 not available for checksum");
+            System.exit(-1);
+        }
+
+        msgDigest.update(messageBytes);
+        return msgDigest.digest();
+    }
 
 	private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {
 		byte[] bytes = null;
