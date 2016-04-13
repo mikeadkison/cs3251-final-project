@@ -12,7 +12,7 @@ public class ClientThread extends Thread {
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
 	private static final int ACK_TIMEOUT = 500; //how long to wait for ACK before resending in ms
-	private static final int CHECKSUM_SIZE = 16; //length of checksum in bytes
+	PacketParser parser = new PacketParser();
 	
 	
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
@@ -113,10 +113,11 @@ public class ClientThread extends Thread {
 
 				if (received.get("type").equals("data")) {
 					if (((Number) received.get("seqNum")).longValue() <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
-						rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-						rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
-
-						// ack the received packet
+						if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
+							rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+							rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+						}
+						// ack the received packet even if we have it already
 						System.out.println("received: " + received + ", ACKing");
 						JSONObject ackJSON = new JSONObject();
 						ackJSON.put("type", "ACK");
@@ -133,7 +134,7 @@ public class ClientThread extends Thread {
 					}
 				} else if (received.get("type").equals("ACK")) {
 					System.out.println("got an ack: " + received);
-					//stop caring about packets once they are ACKed
+					//stop caring about packets you've sent once they are ACKed
 					Iterator<JSONObject> pListIter = rtpSocket.unAckedPackets.iterator();
 					while (pListIter.hasNext()) {
 						JSONObject packet = pListIter.next();
@@ -141,6 +142,7 @@ public class ClientThread extends Thread {
 						System.out.println("ack seqNum: " + received.get("seqNum"));
 						if (((Number) packet.get("seqNum")).longValue() == ((Number) received.get("seqNum")).longValue()) {
 							pListIter.remove();
+							rtpSocket.unAckedPktToTimeSentMap.remove(packet);
 							System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
 							break;
 						}
@@ -156,40 +158,7 @@ public class ClientThread extends Thread {
 		}
 	}
 
-    private byte[] combine(byte[] checksum, byte[] message) {
-        byte[] combined = new byte[checksum.length + message.length];
-        System.arraycopy(checksum, 0, combined, 0, checksum.length); //place checksum at beginning of packet
-        System.arraycopy(message, 0, combined, checksum.length, message.length); //place rest of packet (which is in JSON format) after the checksum
-        return combined;
-    }
-
-    private byte[] getChecksum(byte[] packet) {
-        byte[] checksum = new byte[CHECKSUM_SIZE];
-        System.arraycopy(packet, 0, checksum, 0, CHECKSUM_SIZE);
-        return checksum;
-    }
-
-    private byte[] getMessage(byte[] packet) {
-        int messageSize = packet.length - CHECKSUM_SIZE;
-        byte[] message = new byte[messageSize];
-        return message;
-    }
-
-    /**
-     * @return 16 byte MD5 checksum of given bytes
-     */
-    private byte[] checksum(byte[] messageBytes) {
-        MessageDigest msgDigest = null;
-        try {
-            msgDigest = MessageDigest.getInstance("MD5");
-        } catch (NoSuchAlgorithmException e) {
-            System.out.println("md5 not available for checksum");
-            System.exit(-1);
-        }
-
-        msgDigest.update(messageBytes);
-        return msgDigest.digest();
-    }
+    
 
 	private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {
 		byte[] bytes = null;

@@ -63,6 +63,7 @@ public class ServerRTPSocket {
 		private int connReqPort; //port of client requesting a connection
 		private List<RTPSocket> rtpSockets;
 		long peerWinSize; //the window size of the peer who we are currently setting up a connection to
+		PacketParser parser = new PacketParser();
 		
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {
@@ -128,8 +129,10 @@ public class ServerRTPSocket {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
 						if (((Number) received.get("seqNum")).longValue() <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
-							rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-							rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+							if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
+								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+								rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+							}
 
 							// ack the received packet
 							System.out.println("received: " + received + ", ACKing");
@@ -150,7 +153,7 @@ public class ServerRTPSocket {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
 						System.out.println("got an ack: " + received);
-						//stop caring about packets once they are ACKed
+						//stop caring about packets you've sent once they are ACKed
 						Iterator<JSONObject> pListIter = rtpSocket.unAckedPackets.iterator();
 						while (pListIter.hasNext()) {
 							JSONObject packet = pListIter.next();
@@ -158,6 +161,7 @@ public class ServerRTPSocket {
 							System.out.println("ack seqNum: " + received.get("seqNum"));
 							if (((Number) packet.get("seqNum")).longValue() == ((Number) received.get("seqNum")).longValue()) {
 								pListIter.remove();
+								rtpSocket.unAckedPktToTimeSentMap.remove(packet);
 								System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
 								break;
 							}
