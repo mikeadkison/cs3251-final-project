@@ -123,11 +123,11 @@ public class ClientThread extends Thread {
 						ackJSON.put("seqNum",  received.get("seqNum"));
 
 						
-						/*try {
+						try {
 							socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
 						} catch (IOException e) {
 							System.out.println("issue sending ACK");
-						}*/
+						}
 					} else {
 						System.out.println("had to reject a packet since it wouldn't fit in buffer");
 					}
@@ -137,7 +137,7 @@ public class ClientThread extends Thread {
 					Iterator<JSONObject> pListIter = rtpSocket.unAckedPackets.iterator();
 					while (pListIter.hasNext()) {
 						JSONObject packet = pListIter.next();
-						System.out.println("packet seqNum: " + packet.get("seqNum"));
+						System.out.println("packet seqNum: " +  	packet.get("seqNum"));
 						System.out.println("ack seqNum: " + received.get("seqNum"));
 						if (((Number) packet.get("seqNum")).longValue() == ((Number) received.get("seqNum")).longValue()) {
 							pListIter.remove();
