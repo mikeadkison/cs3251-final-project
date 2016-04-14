@@ -13,11 +13,11 @@ public class RTPSocket {
 	protected long rcvWinSize; //the current size of the window (the buffer)
 	private long maxRcvWinSize; //the biggest the window can get
 	protected long peerWinSize; //the window size of the host you are connected to
-	protected final List<JSONObject> bufferList = new LinkedList<>();;
+	protected final List<Packet> bufferList = new LinkedList<>();;
 	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
-	protected final List<JSONObject> unAckedPackets = new ArrayList<>();
-	protected final Map<JSONObject, Long> unAckedPktToTimeSentMap = new HashMap<>();
+	protected final List<Packet> unAckedPackets = new ArrayList<>();
+	protected final Map<Packet, Long> unAckedPktToTimeSentMap = new HashMap<>();
 	protected long highestSeqNumAcked; //highest seq num that we've sent that we received an ack for from our peer
 	protected int totalBytesSent;
 
@@ -101,16 +101,10 @@ public class RTPSocket {
 		long seqNum = highestSeqNumGivenToApplication + 1;
 		boolean miss = false;
 		while (!miss) { //while the packet with the next seqNum can be found in the buffer:
-			for (JSONObject packet: bufferList) {
-				if ((Long) packet.get("seqNum") == seqNum) {
-					String dataStr = (String) packet.get("data");
-					byte[] dataBytes = null;
-					try {
-						dataBytes = dataStr.getBytes(ENCODING);
-					} catch (UnsupportedEncodingException e) {
-						System.out.println("unsupported encoding");
-						System.exit(-1);
-					}
+			for (Packet packet: bufferList) {
+				if (packet.seqNum == seqNum) {
+					byte[] dataBytes = packet.data;
+
 					dataInQueue.add(dataBytes);
 					bufferList.remove(packet);
 					highestSeqNumGivenToApplication = seqNum;
@@ -158,14 +152,14 @@ public class RTPSocket {
 	 *
 	 * @return -1 if nothing in list
 	 */
-	private long getLowestSeqNumInList(List<JSONObject> list) {
+	private long getLowestSeqNumInList(List<Packet> list) {
 		if (list.size() == 0) {
 			return -1;
 		}
 
-		long lowestSeqNum = ((Number) list.get(0).get("seqNum")).longValue();
+		long lowestSeqNum = list.get(0).seqNum;
 		for (int i = 1; i < list.size(); i++) {
-			long seqNum = ((Number) list.get(i).get("seqNum")).longValue();
+			long seqNum = list.get(i).seqNum;
 			if (seqNum < lowestSeqNum) {
 				lowestSeqNum = seqNum;
 			}

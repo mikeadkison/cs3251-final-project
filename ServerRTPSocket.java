@@ -63,7 +63,6 @@ public class ServerRTPSocket {
 		private int connReqPort; //port of client requesting a connection
 		private List<RTPSocket> rtpSockets;
 		long peerWinSize; //the window size of the peer who we are currently setting up a connection to
-		PacketParser parser = new PacketParser();
 		
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {

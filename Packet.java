@@ -8,16 +8,24 @@ import java.security.*;
 
 /**
  * represents a packet
- * packet byte format: [checksum - 16 bytes][ACK? - 1 byte][seqNum - 4 bytes][data - N bytes]
+ * packet byte format: [checksum - 16 bytes][packet size - 2 bytes][FLAG NUMBER? - 1 byte][seqNum - 4 bytes][data - N bytes]
+ *
+ * FLAGS: name  #
+ *        ACK | 1
+ *        connectionInit | 2 // first of 3 way handshake
+ *        connectionInitConfirm | 3 // second of 3 way handshake
+ *        connectionInitConfirmAck | 4 //third of 3 way handshake
+ * the checksum does not not include the packet size 
  */
 public class Packet {
 	protected boolean isAck;
 	protected byte[] data;
 	protected byte[] checksum;
 	protected int seqNum;
-	private byte[] packetBytes; //packet in byte form for sending over network
+	protected byte[] packetBytes; //packet in byte form for sending over network
 	protected boolean checksumMatch;
 
+	private static final int PACKET_SIZE_SIZE = 2; //packet size is specified in 2 bytes(uint16). the packet size includes the packet size bytes
 	private static final int CHECKSUM_SIZE = 16; //length of checksum in bytes
 	private static final int SEQNUM_SIZE = 4; //seqnum can be up to 2^32 (4 bytes)
 	private static final int FLAG_SIZE = 1; //1 byte for flags
@@ -25,9 +33,13 @@ public class Packet {
 	/**
 	 * used to construct a packet from received bytes
 	 */
-	public Packet(byte[] packetBytes) {
-		byte[] checksumBytesFromPacket = getChecksum(packetBytes);
-		byte[] packetWithoutChecksum = withoutChecksum(packetBytes);
+	public Packet(byte[] bufferBytes) {
+		int packetSize = getPacketSize(bufferBytes); //first, cut off the part of the buffer that is free space, not actually being used to hold the packet
+		byte[] packetBytes = new byte[packetSize];
+		System.arraycopy(bufferBytes, 0, packetBytes, 0, packetSize);
+
+		byte[] checksumBytesFromPacket = getChecksum(packetBytes); //extract the checksum from the received packet
+		byte[] packetWithoutChecksum = withoutChecksum(packetBytes); //remove the checksum bytes from the received packet
 		byte[] checksumBytesCalc = getChecksum(packetWithoutChecksum);
 		if (!Arrays.equals(checksumBytesFromPacket, checksumBytesCalc)) { //make sure checksum matches rest of packet
 			checksumMatch = false;
@@ -52,13 +64,19 @@ public class Packet {
 		checksumMatch = true;
 	}
 
+	private int getPacketSize(byte[] buffer) {
+		byte[] sizeBytes = new byte[PACKET_SIZE_SIZE];
+		System.arraycopy(buffer, CHECKSUM_SIZE, sizeBytes, 0, PACKET_SIZE_SIZE);
+		return ByteBuffer.wrap(sizeBytes).getChar();
+	}
+
 	// get the bytes of the packet to send over the network
 	protected byte[] getBytes() {
 		return packetBytes;
 	}
 
 	private byte getFlagByte(byte[] packetBytes) {
-		return packetBytes[CHECKSUM_SIZE]; //the flag byte is right after the checksum bytes
+		return packetBytes[CHECKSUM_SIZE + PACKET_SIZE_SIZE]; //the flag byte is right after the bytes which specify packet size
 	}
 
 	private byte[] withoutChecksum(byte[] packetBytes) {
@@ -67,10 +85,10 @@ public class Packet {
 		return withoutChecksum;
 	}
 
-	private byte[] combine(byte[] checksum, byte[] message) {
-        byte[] combined = new byte[checksum.length + message.length];
-        System.arraycopy(checksum, 0, combined, 0, checksum.length); //place checksum at beginning of packet
-        System.arraycopy(message, 0, combined, checksum.length, message.length); //place rest of packet after the checksum
+	private byte[] combine(byte[] firstArray, byte[] secondArray) {
+        byte[] combined = new byte[firstArray.length + secondArray.length];
+        System.arraycopy(firstArray, 0, combined, 0, firstArray.length); //place firstArray at beginning
+        System.arraycopy(secondArray, 0, combined, firstArray.length, secondArray.length); //place second array at end
         return combined;
     }
 
@@ -81,14 +99,14 @@ public class Packet {
     }
 
     protected byte[] getMessage(byte[] packet) {
-        int messageSize = packet.length - CHECKSUM_SIZE - SEQNUM_SIZE - FLAG_SIZE;
+        int messageSize = packet.length - CHECKSUM_SIZE - PACKET_SIZE_SIZE - SEQNUM_SIZE - FLAG_SIZE; //the message size = packet size - metadata size
         byte[] message = new byte[messageSize];
-        System.arraycopy(packet, CHECKSUM_SIZE + SEQNUM_SIZE + FLAG_SIZE, message, 0, messageSize);
+        System.arraycopy(packet, CHECKSUM_SIZE + PACKET_SIZE_SIZE + SEQNUM_SIZE + FLAG_SIZE, message, 0, messageSize);
         return message;
     }
 
     protected int getSeqNum(byte[] packet) {
-    	return ByteBuffer.wrap(packet, CHECKSUM_SIZE + FLAG_SIZE, SEQNUM_SIZE).getInt();
+    	return ByteBuffer.wrap(packet, CHECKSUM_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE, SEQNUM_SIZE).getInt();
     }
 
     private byte[] intToBytes(int integer) {
@@ -96,14 +114,28 @@ public class Packet {
     }
 
     protected byte[] constructPacket(byte[] data, boolean isAck, int seqNum) {
-    	byte[] packetWithoutChecksum = new byte[FLAG_SIZE + SEQNUM_SIZE + data.length];
+    	byte[] packetWithoutChecksum = new byte[PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length];
+
+    	char packetSize = (char) (CHECKSUM_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length); //the size in bytes of the packet
+    	byte[] packetSizeBytes = charToBytes(packetSize);
+    	System.arraycopy(packetSizeBytes, 0, packetWithoutChecksum, 0, PACKET_SIZE_SIZE); //put packet size in the packet size bytes
+
     	byte flagByte = isAck ? (byte) 1 : (byte) 0;
-    	packetWithoutChecksum[0] = flagByte; //put flags in packet
+    	packetWithoutChecksum[PACKET_SIZE_SIZE] = flagByte; //put flags in packet after the packet size bytes
+
     	byte[] seqNumBytes = intToBytes(seqNum);
-    	System.arraycopy(seqNumBytes, 0, packetWithoutChecksum, FLAG_SIZE, seqNumBytes.length); //put seqNum in packet
-    	System.arraycopy(data, 0, packetWithoutChecksum, FLAG_SIZE + SEQNUM_SIZE, data.length); //put data in packet
+    	System.arraycopy(seqNumBytes, 0, packetWithoutChecksum, PACKET_SIZE_SIZE + FLAG_SIZE, seqNumBytes.length); //put seqNum in packet
+
+    	System.arraycopy(data, 0, packetWithoutChecksum, PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE, data.length); //put data in packet
+
     	byte[] checksum = checksum(packetWithoutChecksum);
-    	return combine(checksum, packetWithoutChecksum); //return the full packet (includes the checksum)
+    	byte[] withChecksum = combine(checksum, packetWithoutChecksum); //return the full packet (includes the checksum)
+
+    	return withChecksum;
+    }
+
+    private byte[] charToBytes(char character) {
+    	return ByteBuffer.allocate(2).putChar(character).array();
     }
 
     /**
@@ -120,5 +152,22 @@ public class Packet {
 
         msgDigest.update(messageBytes);
         return msgDigest.digest();
+    }
+
+    @Override
+    public String toString() {
+    	return "ACK? : " + isAck + " Checksum: " + Arrays.toString(checksum) + " data length: " + data.length;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+    	if (this == other) {
+			return true;
+		}
+		if (!(other instanceof Packet)) {
+			return false;
+		}
+		final Packet theOther = (Packet) other;
+		return this.seqNum == theOther.seqNum && Arrays.equals(this.checksum, theOther.checksum);
     }
 }

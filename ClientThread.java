@@ -12,7 +12,6 @@ public class ClientThread extends Thread {
 	long highestSeqNumGivenToApplication = -1;
 	private static final int TIMEOUT = 50; //50 ms receive timeout
 	private static final int ACK_TIMEOUT = 500; //how long to wait for ACK before resending in ms
-	PacketParser parser = new PacketParser();
 	
 	
 	public ClientThread(DatagramSocket socket, RTPSocket rtpSocket) {
@@ -35,7 +34,7 @@ public class ClientThread extends Thread {
 				int seqNum = rtpSocket.seqNum;
 
 				if (seqNum <= highestAllowableSeqNum) {
-					byte[] sendBytes = dataOutQueueItr.next();
+					byte[] sendBytes = dataOutQueueItr.next(); //the data to send
 					rtpSocket.totalBytesSent += sendBytes.length;
 					System.out.println("-----------");
 					System.out.println("highestAllowableSeqNum: " + highestAllowableSeqNum);
@@ -44,45 +43,34 @@ public class ClientThread extends Thread {
 					System.out.println("highestSeqNumAcked by peer: " + rtpSocket.highestSeqNumAcked);
 					dataOutQueueItr.remove();
 					//put the data in a packet and send it
-					String dataAsString = null;
-					try {
-						dataAsString = new String(sendBytes, ENCODING);
-					} catch (UnsupportedEncodingException e) {
-						System.out.println ("issue encoding");
-					}
+					Packet packet = new Packet(sendBytes, false, rtpSocket.seqNum++); //the rtp packet
 
-					JSONObject packetJSON = new JSONObject();
-					packetJSON.put("type", "data");
-					packetJSON.put("data", dataAsString);
-					packetJSON.put("seqNum", rtpSocket.seqNum);
-					rtpSocket.seqNum++;
-
-					DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
+					DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
 					try {
 						socket.send(sndPkt);
 						System.out.println("# of unacked packets increased to: " + rtpSocket.unAckedPackets.size());
-						System.out.println("sent: " + dataAsString);
+						System.out.println("sent: " + Arrays.toString(packet.getBytes()));
 					} catch (IOException e) {
 						System.out.println("issue sending packet");
 					}
-					rtpSocket.unAckedPackets.add(packetJSON);
-					rtpSocket.unAckedPktToTimeSentMap.put(packetJSON, System.currentTimeMillis());
+					rtpSocket.unAckedPackets.add(packet);
+					rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 				} else { //the sequence number of this packet would be too high for the remote's buffer. Stop trying to send data after this iteration
 					seqNumsTooHigh = true;
 				}
 			}
 
 			//resend unacked packets which have timed out
-			for (JSONObject packetJSON: rtpSocket.unAckedPktToTimeSentMap.keySet()) {
-				long timeSent = rtpSocket.unAckedPktToTimeSentMap.get(packetJSON);
+			for (Packet packet: rtpSocket.unAckedPktToTimeSentMap.keySet()) {
+				long timeSent = rtpSocket.unAckedPktToTimeSentMap.get(packet);
 				if (System.currentTimeMillis() - timeSent > ACK_TIMEOUT) { //ack not received in time, so resend
-					DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
+					DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
 					try {
 						socket.send(sndPkt);
 					} catch (IOException e) {
 						System.out.println("issue sending packet");
 					}
-					rtpSocket.unAckedPktToTimeSentMap.put(packetJSON, System.currentTimeMillis());
+					rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 				}
 			}
 
@@ -100,47 +88,36 @@ public class ClientThread extends Thread {
 			}
 
 			if (receivedSomething) {
-				String rcvdString = null;
-				try {
-					rcvdString = new String(rcvPkt.getData(), ENCODING);
-				} catch (UnsupportedEncodingException e) {
-					System.out.println("unsupported encoding while decoding udp message");
-					System.exit(-1);
-				}
+				Packet received = new Packet(rcvdBytes);
 
-				rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
-				JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
-
-				if (received.get("type").equals("data")) {
-					if (((Number) received.get("seqNum")).longValue() <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
+				if (!received.isAck) {
+					if (received.seqNum <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
 						if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
 							rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 							rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 						}
 						// ack the received packet even if we have it already
 						System.out.println("received: " + received + ", ACKing");
-						JSONObject ackJSON = new JSONObject();
-						ackJSON.put("type", "ACK");
-						ackJSON.put("seqNum",  received.get("seqNum"));
+						Packet ackPack = new Packet(new byte[0], true, received.seqNum);
 
 						
 						try {
-							socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
+							socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
 						} catch (IOException e) {
 							System.out.println("issue sending ACK");
 						}
 					} else {
 						System.out.println("had to reject a packet since it wouldn't fit in buffer");
 					}
-				} else if (received.get("type").equals("ACK")) {
+				} else if (received.isAck) {
 					System.out.println("got an ack: " + received);
 					//stop caring about packets you've sent once they are ACKed
-					Iterator<JSONObject> pListIter = rtpSocket.unAckedPackets.iterator();
+					Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
 					while (pListIter.hasNext()) {
-						JSONObject packet = pListIter.next();
-						System.out.println("packet seqNum: " +  	packet.get("seqNum"));
-						System.out.println("ack seqNum: " + received.get("seqNum"));
-						if (((Number) packet.get("seqNum")).longValue() == ((Number) received.get("seqNum")).longValue()) {
+						Packet packet = pListIter.next();
+						System.out.println("packet seqNum: " +  packet.seqNum);
+						System.out.println("ack seqNum: " + received.seqNum);
+						if (packet.seqNum == received.seqNum) {
 							pListIter.remove();
 							rtpSocket.unAckedPktToTimeSentMap.remove(packet);
 							System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
@@ -148,7 +125,7 @@ public class ClientThread extends Thread {
 						}
 					}
 
-					long seqNum = ((Number) received.get("seqNum")).longValue();
+					int seqNum = received.seqNum;
 					if (seqNum > rtpSocket.highestSeqNumAcked) {
 						rtpSocket.highestSeqNumAcked = seqNum;
 					}
