@@ -2,7 +2,6 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import org.json.simple.*;
 import java.security.*;
 
 public class ClientThread extends Thread {
@@ -43,7 +42,7 @@ public class ClientThread extends Thread {
 					System.out.println("highestSeqNumAcked by peer: " + rtpSocket.highestSeqNumAcked);
 					dataOutQueueItr.remove();
 					//put the data in a packet and send it
-					Packet packet = new Packet(sendBytes, false, rtpSocket.seqNum++); //the rtp packet
+					Packet packet = new Packet(sendBytes, Packet.DATA, rtpSocket.seqNum++); //the rtp packet
 
 					DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
 					try {
@@ -98,7 +97,7 @@ public class ClientThread extends Thread {
 						}
 						// ack the received packet even if we have it already
 						System.out.println("received: " + received + ", ACKing");
-						Packet ackPack = new Packet(new byte[0], true, received.seqNum);
+						Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum);
 
 						
 						try {
@@ -134,19 +133,4 @@ public class ClientThread extends Thread {
 			}
 		}
 	}
-
-    
-
-	private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {
-		byte[] bytes = null;
-		try {
-			bytes = (json.toString() + "\n").getBytes(ENCODING);
-		} catch (UnsupportedEncodingException e) {
-			System.out.println("unsupported encoding");
-			System.exit(-1);
-		}
-		DatagramPacket packet = new DatagramPacket(bytes, bytes.length, destIP, destPort);
-		return packet;
-	}
-
 }

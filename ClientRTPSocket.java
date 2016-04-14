@@ -1,8 +1,10 @@
+/**
+ * TODO - add window size negotation from Packet
+ */
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import org.json.simple.*;
 
 /**
  * used to connect to the server and then generate an RTPSocket for further communication
@@ -34,7 +36,8 @@ public class ClientRTPSocket {
 		}
 
 		// connection initiation section
-		DatagramPacket connInitPacket = constructHandshakePacket("initConnection");
+		Packet rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT, 0);
+		DatagramPacket connInitPacket = new DatagramPacket(rtpInitPacket.getBytes(), rtpInitPacket.getBytes().length, serverIPAddress, serverUDPPort);
 
 		
 		try {
@@ -45,11 +48,21 @@ public class ClientRTPSocket {
 		}
 
 		
-		JSONObject received = recv();
-		if (received.get("type").equals("initConnectionConfirm")) {
+		byte[] rcvdBytes = new byte[1000];
+		DatagramPacket rcvPkt = new DatagramPacket(rcvdBytes, rcvdBytes.length);
+		try {
+			socket.receive(rcvPkt);
+		} catch (IOException e) {
+			System.out.println("issue receiving packet during connection setup");
+		}
+		
+		Packet received = new Packet(rcvdBytes);
+
+		if (received.isConnectionInitConfirmAck()) {
 			//send the last part of the 3-way handshake
 			System.out.println("received initConnectionConfirm, ACKING");
-			DatagramPacket connInitLastPacket = constructHandshakePacket("initConnectionConfirmAck");
+			rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM_ACK, 0);
+			DatagramPacket connInitLastPacket = new DatagramPacket(rtpInitPacket.getBytes(), rtpInitPacket.getBytes().length, serverIPAddress, serverUDPPort);
 			try {
 				socket.send(connInitLastPacket);
 			} catch (IOException e) {
@@ -60,7 +73,7 @@ public class ClientRTPSocket {
 			ConcurrentLinkedQueue<byte[]> dataInQueue = new ConcurrentLinkedQueue<>();
 			ConcurrentLinkedQueue<byte[]> dataOutQueue = new ConcurrentLinkedQueue<>();
 			
-			long peerWinSize = (Long) received.get("winSize");
+			long peerWinSize = 500;
 
 			RTPSocket rtpSocket = new RTPSocket(serverIPAddress, serverUDPPort, dataInQueue, dataOutQueue, maxWinSize, peerWinSize);
 			ClientThread clientThread = new ClientThread(socket, rtpSocket);
@@ -69,50 +82,5 @@ public class ClientRTPSocket {
 		}
 
 		return null;
-	}
-
-	private JSONObject recv() {
-		byte[] rcvdBytes = new byte[1000];
-		DatagramPacket rcvPkt = new DatagramPacket(rcvdBytes, rcvdBytes.length);
-		try {
-			socket.receive(rcvPkt);
-		} catch (IOException e) {
-			System.out.println("issue receiving on socket" + socket);
-			System.exit(0);
-		}
-
-		String rcvdString = null;
-		try {
-			rcvdString = new String(rcvPkt.getData(), ENCODING);
-		} catch (UnsupportedEncodingException e) {
-			System.out.println("unsupported encoding while decoding udp message");
-			System.exit(-1);
-		}
-
-		rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
-		return (JSONObject) JSONValue.parse(rcvdString);
-	}
-
-	private DatagramPacket constructHandshakePacket(String type) {
-		// connection initiation section
-		JSONObject handshakeMsg = new JSONObject();
-		handshakeMsg.put("type", type);
-		handshakeMsg.put("winSize", maxWinSize);
-		System.out.println(handshakeMsg);
-		DatagramPacket handshakePacket = jsonToPacket(handshakeMsg);
-
-		return handshakePacket;
-	}
-
-	private DatagramPacket jsonToPacket(JSONObject json) {
-		byte[] bytes = null;
-		try {
-			bytes = (json.toString() + "\n").getBytes(ENCODING);
-		} catch (UnsupportedEncodingException e) {
-			System.out.println("unsupported encoding");
-			System.exit(-1);
-		}
-		DatagramPacket packet = new DatagramPacket(bytes, bytes.length, serverIPAddress, serverUDPPort);
-		return packet;
 	}
 }
