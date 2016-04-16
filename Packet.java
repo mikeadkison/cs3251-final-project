@@ -215,7 +215,8 @@ public class Packet {
         }
 
         msgDigest.update(messageBytes);
-        return msgDigest.digest();
+        byte[] checksum = msgDigest.digest();
+        return checksum;
     }
 
     @Override
