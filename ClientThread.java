@@ -25,23 +25,25 @@ public class ClientThread extends Thread {
 		//where the work of the thread gets done
 
 		while (true) {
-
+			//fix combine multiple things in queue
 			//send data
 			Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
 			long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer
-			int winSpaceLeft = rtpSocket.peerWinSize - rtpSocket.numBytesUnacked;
-			if (winSpaceLeft > 0) {
-				System.out.println("win space left: " + winSpaceLeft);
-			}
+			int winSpaceLeft = rtpSocket.peerWinSize - rtpSocket.numBytesUnacked - Packet.getHeaderSize() * rtpSocket.unAckedPackets.size();
+
 			if (rtpSocket.dataOutQueue.peek() != null
 					&& winSpaceLeft > Packet.getHeaderSize()) { //if use while, not if could have some issues with dominating the connection if the queue is constantly populated
+				if (winSpaceLeft > 0) {
+					System.out.println("win space left: " + winSpaceLeft);
+				}
 
 				byte[] removedBytes = rtpSocket.dataOutQueue.poll();
-				int maxDataSize = MAX_PACKET_SIZE - Packet.getHeaderSize();
-				int amtOfDataToPutInPacket = winSpaceLeft > maxDataSize ? maxDataSize : winSpaceLeft;
+				int maxDataSize = MAX_PACKET_SIZE - Packet.getHeaderSize(); //the most data we can send without going over 1000 byte packet size limit
+				int winSpaceLeftForData = winSpaceLeft - Packet.getHeaderSize();
+				int amtOfDataToPutInPacket = winSpaceLeftForData > maxDataSize ? maxDataSize : winSpaceLeftForData;
 				amtOfDataToPutInPacket = amtOfDataToPutInPacket > removedBytes.length ? removedBytes.length : amtOfDataToPutInPacket;
 
-				byte[] pktData = new byte[amtOfDataToPutInPacket + Packet.getHeaderSize()];
+				byte[] pktData = new byte[amtOfDataToPutInPacket];
 				System.arraycopy(removedBytes, 0, pktData, 0, amtOfDataToPutInPacket);
 
 				//put the data in a packet and send it
@@ -57,7 +59,8 @@ public class ClientThread extends Thread {
 				rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 				rtpSocket.totalBytesSent += amtOfDataToPutInPacket;
 				rtpSocket.numBytesUnacked += amtOfDataToPutInPacket;
-				System.out.println("# of unacked bytes increased to: " + rtpSocket.numBytesUnacked);
+				//System.out.println("# of unacked bytes increased to: " + rtpSocket.numBytesUnacked);
+				
 
 
 				//put the data you wont be sendign at front of queue if need be
@@ -107,7 +110,7 @@ public class ClientThread extends Thread {
 							rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 						}
 						// ack the received packet even if we have it already
-						System.out.println("received: " + received + ", ACKing");
+						System.out.println("received: " + received.seqNum + ", ACKing");
 						Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.rcvWinSize);
 
 						
@@ -122,7 +125,7 @@ public class ClientThread extends Thread {
 						System.out.println("had to reject a packet since it wouldn't fit in buffer");
 					}
 				} else if (received.isAck()) {
-					System.out.println("got an ack: " + received);
+					System.out.println("got an ack: " + received.seqNum);
 					//stop caring about packets you've sent once they are ACKed
 					Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
 					while (pListIter.hasNext()) {

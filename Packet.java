@@ -164,8 +164,6 @@ public class Packet {
     }
 
     private int getWinSize(byte[] packet) {
-    	System.out.println("getting winSize: ");
-    	System.out.println(Arrays.toString(packet));
     	return ByteBuffer.wrap(packet, CHECKSUM_SIZE, WINDOW_SIZE_SIZE).getInt();
     }
 

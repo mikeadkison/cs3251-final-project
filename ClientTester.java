@@ -20,7 +20,7 @@ public class ClientTester {
 
 
 		try {
-			clientSocket.send(BIG_STRING.getBytes(ENCODING));
+			clientSocket.send("hello".getBytes(ENCODING));
 
 		} catch (UnsupportedEncodingException e) {
 			System.out.println("issue wwith encoding");
