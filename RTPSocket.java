@@ -10,7 +10,7 @@ public class RTPSocket {
 	protected ConcurrentLinkedDeque<byte[]> dataOutQueue; //the queue where the api puts data that it wants sent out
 	protected int seqNum;
 	protected int rcvWinSize; //the current size of the window (the buffer)
-	private int maxRcvWinSize; //the biggest the window can get
+	protected int maxRcvWinSize; //the biggest the window can get, also what is sent to peer
 	protected int peerWinSize; //the window size of the host you are connected to
 	protected final List<Packet> bufferList = new LinkedList<>(); //the buffer for stuff received
 	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer

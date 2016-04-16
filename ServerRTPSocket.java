@@ -132,7 +132,7 @@ public class ServerRTPSocket {
 							}
 							// ack the received packet even if we have it already
 							System.out.println("received: " + received.seqNum + ", ACKing");
-							Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.rcvWinSize);
+							Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.maxRcvWinSize);
 
 							
 							try {
@@ -243,7 +243,7 @@ public class ServerRTPSocket {
 						System.arraycopy(removedBytes, 0, pktData, 0, amtOfDataToPutInPacket);
 
 						//put the data in a packet and send it
-						Packet packet = new Packet(pktData, Packet.DATA, rtpSocket.seqNum++, rtpSocket.rcvWinSize); //the rtp packet
+						Packet packet = new Packet(pktData, Packet.DATA, rtpSocket.seqNum++, rtpSocket.maxRcvWinSize); //the rtp packet
 
 						DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
 						try {
