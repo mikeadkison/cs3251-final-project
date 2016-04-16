@@ -124,7 +124,8 @@ public class ServerRTPSocket {
 					} else if (received.isData()) {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
-						if (received.getPacketSize() <= rtpSocket.rcvWinSize) { //check if packet fits in buffer (rceive window) of the socket on this computer
+						if (received.getPacketSize() <= rtpSocket.rcvWinSize //check if packet fits in buffer (rceive window) of the socket on this computer
+								&& received.checksumMatch) { //make sure the checksum matches the rest of the packet
 							if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
 								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 								rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
