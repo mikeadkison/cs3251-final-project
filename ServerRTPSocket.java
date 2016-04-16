@@ -13,6 +13,7 @@ public class ServerRTPSocket {
 	private static Object lock = new Object();
 	private static final int TIMEOUT = 50; //50 ms receive timeout
 	private static int maxWinSize; //the maximum receive window size in packets
+	private static final int MAX_PACKET_SIZE = 1000; //bytes
 
 
 	public ServerRTPSocket(int UDPport, int maxWinSize) {
@@ -123,14 +124,14 @@ public class ServerRTPSocket {
 					} else if (received.isData()) {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
-						if (received.seqNum <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
+						if (received.getPacketSize() <= rtpSocket.rcvWinSize) { //check if packet fits in buffer (rceive window) of the socket on this computer
 							if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
 								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+								rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
 								rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 							}
-
 							// ack the received packet even if we have it already
-							System.out.println("received: " + received + ", ACKing");
+							System.out.println("received: " + received.seqNum + ", ACKing");
 							Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.rcvWinSize);
 
 							
@@ -140,31 +141,34 @@ public class ServerRTPSocket {
 								System.out.println("issue sending ACK");
 							}
 
+							rtpSocket.peerWinSize = received.winSize;
 						} else {
 							System.out.println("had to reject a packet since it wouldn't fit in buffer");
 						}
 					} else if (received.isAck()) {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
-						System.out.println("got an ack: " + received);
+						System.out.println("got an ack: " + received.seqNum);
 						//stop caring about packets you've sent once they are ACKed
 						Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
 						while (pListIter.hasNext()) {
 							Packet packet = pListIter.next();
-							System.out.println("packet seqNum: " + packet.seqNum);
+							System.out.println("packet seqNum: " +  packet.seqNum);
 							System.out.println("ack seqNum: " + received.seqNum);
 							if (packet.seqNum == received.seqNum) {
 								pListIter.remove();
 								rtpSocket.unAckedPktToTimeSentMap.remove(packet);
+								rtpSocket.numBytesUnacked -= packet.getDataSize();
 								System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
 								break;
 							}
 						}
 
-						long seqNum = received.seqNum;
+						int seqNum = received.seqNum;
 						if (seqNum > rtpSocket.highestSeqNumAcked) {
 							rtpSocket.highestSeqNumAcked = seqNum;
 						}
+
 					}
 
 					if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
@@ -217,39 +221,52 @@ public class ServerRTPSocket {
 					}
 
 						
+					//fix combine multiple things in queue
 					//send data
 					Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
 					long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer
-					boolean seqNumsTooHigh = false; //stop trying to send data once we have too many unacked packets
-					while (dataOutQueueItr.hasNext() && !seqNumsTooHigh) { //could have some issues with dominating the connection if the queue is constantly populated
-						int seqNum = rtpSocket.seqNum;
+					int winSpaceLeft = rtpSocket.peerWinSize - rtpSocket.numBytesUnacked - Packet.getHeaderSize() * rtpSocket.unAckedPackets.size();
 
-						if (seqNum <= highestAllowableSeqNum) {
-							byte[] sendBytes = dataOutQueueItr.next(); //the data to send
-							rtpSocket.totalBytesSent += sendBytes.length;
-							System.out.println("-----------");
-							System.out.println("highestAllowableSeqNum: " + highestAllowableSeqNum);
-							System.out.println("max peer win size: " + rtpSocket.peerWinSize);
-							System.out.println("sent " + rtpSocket.totalBytesSent + " total bytes");
-							System.out.println("highestSeqNumAcked by peer: " + rtpSocket.highestSeqNumAcked);
-							dataOutQueueItr.remove();
-							//put the data in a packet and send it
-							Packet packet = new Packet(sendBytes, Packet.DATA, rtpSocket.seqNum++, rtpSocket.rcvWinSize); //the rtp packet FIX make sure winsize is right
-
-							DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
-							try {
-								System.out.println("sending a packet!");
-								socket.send(sndPkt);
-								System.out.println("# of unacked packets increased to: " + rtpSocket.unAckedPackets.size());
-								//System.out.println("sent: " + Arrays.toString(packet.getBytes()));
-							} catch (IOException e) {
-								System.out.println("issue sending packet");
-							}
-							rtpSocket.unAckedPackets.add(packet);
-							rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
-						} else { //the sequence number of this packet would be too high for the remote's buffer. Stop trying to send data after this iteration
-							seqNumsTooHigh = true;
+					if (rtpSocket.dataOutQueue.peek() != null
+							&& winSpaceLeft > Packet.getHeaderSize()) { //if use while, not if could have some issues with dominating the connection if the queue is constantly populated
+						if (winSpaceLeft > 0) {
+							System.out.println("win space left: " + winSpaceLeft);
 						}
+
+						byte[] removedBytes = rtpSocket.dataOutQueue.poll();
+						int maxDataSize = MAX_PACKET_SIZE - Packet.getHeaderSize(); //the most data we can send without going over 1000 byte packet size limit
+						int winSpaceLeftForData = winSpaceLeft - Packet.getHeaderSize();
+						int amtOfDataToPutInPacket = winSpaceLeftForData > maxDataSize ? maxDataSize : winSpaceLeftForData;
+						amtOfDataToPutInPacket = amtOfDataToPutInPacket > removedBytes.length ? removedBytes.length : amtOfDataToPutInPacket;
+
+						byte[] pktData = new byte[amtOfDataToPutInPacket];
+						System.arraycopy(removedBytes, 0, pktData, 0, amtOfDataToPutInPacket);
+
+						//put the data in a packet and send it
+						Packet packet = new Packet(pktData, Packet.DATA, rtpSocket.seqNum++, rtpSocket.rcvWinSize); //the rtp packet
+
+						DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
+						try {
+							socket.send(sndPkt);
+						} catch (IOException e) {
+							System.out.println("issue sending packet");
+						}
+						rtpSocket.unAckedPackets.add(packet);
+						rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
+						rtpSocket.totalBytesSent += amtOfDataToPutInPacket;
+						rtpSocket.numBytesUnacked += amtOfDataToPutInPacket;
+						//System.out.println("# of unacked bytes increased to: " + rtpSocket.numBytesUnacked);
+						
+
+
+						//put the data you wont be sendign at front of queue if need be
+						int numBytesUnsent = removedBytes.length - amtOfDataToPutInPacket;
+						if (numBytesUnsent > 0) {
+							byte[] unsentBytes = new byte[numBytesUnsent];
+							System.arraycopy(removedBytes, amtOfDataToPutInPacket, unsentBytes, 0, numBytesUnsent);
+							rtpSocket.dataOutQueue.offerFirst(unsentBytes); //put unsent bytes back at the beginning of the queue
+						}
+				
 					}
 				}
 			}

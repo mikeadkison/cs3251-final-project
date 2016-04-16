@@ -104,9 +104,10 @@ public class ClientThread extends Thread {
 				Packet received = new Packet(rcvdBytes);
 
 				if (received.isData()) {
-					if (received.seqNum <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
+					if (received.getPacketSize() <= rtpSocket.rcvWinSize) { //check if packet fits in buffer (rceive window) of the socket on this computer
 						if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
 							rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+							rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
 							rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 						}
 						// ack the received packet even if we have it already

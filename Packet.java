@@ -93,6 +93,10 @@ public class Packet {
 		return flag == ACK;
 	}
 
+	protected int getPacketSize() {
+		return packetBytes.length;
+	}
+	
 	protected boolean isData() {
 		return flag == DATA;
 	}

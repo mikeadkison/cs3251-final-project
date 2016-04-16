@@ -12,7 +12,7 @@ public class RTPSocket {
 	protected int rcvWinSize; //the current size of the window (the buffer)
 	private int maxRcvWinSize; //the biggest the window can get
 	protected int peerWinSize; //the window size of the host you are connected to
-	protected final List<Packet> bufferList = new LinkedList<>();;
+	protected final List<Packet> bufferList = new LinkedList<>(); //the buffer for stuff received
 	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
 	protected final List<Packet> unAckedPackets = new ArrayList<>();
@@ -109,6 +109,7 @@ public class RTPSocket {
 
 					dataInQueue.add(dataBytes);
 					bufferList.remove(packet);
+					this.rcvWinSize += packet.getPacketSize(); //increase the window size since a packet has been removed from the buffer
 					highestSeqNumGivenToApplication = seqNum;
 					miss = false;
 					System.out.println("added seqNum " + seqNum + " to application in queue with size " + dataBytes.length);
