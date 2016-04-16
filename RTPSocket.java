@@ -2,7 +2,6 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import org.json.simple.*;
 
 public class RTPSocket {
 	protected InetAddress IP; //ip of peer
@@ -10,9 +9,9 @@ public class RTPSocket {
 	protected ConcurrentLinkedQueue<byte[]> dataInQueue; //the queue that holds data ready to be read
 	protected ConcurrentLinkedQueue<byte[]> dataOutQueue; //the queue where the api puts data that it wants sent out
 	protected int seqNum;
-	protected long rcvWinSize; //the current size of the window (the buffer)
-	private long maxRcvWinSize; //the biggest the window can get
-	protected long peerWinSize; //the window size of the host you are connected to
+	protected int rcvWinSize; //the current size of the window (the buffer)
+	private int maxRcvWinSize; //the biggest the window can get
+	protected int peerWinSize; //the window size of the host you are connected to
 	protected final List<Packet> bufferList = new LinkedList<>();;
 	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
@@ -21,7 +20,7 @@ public class RTPSocket {
 	protected long highestSeqNumAcked; //highest seq num that we've sent that we received an ack for from our peer
 	protected int totalBytesSent;
 
-	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, long maxRcvWinSize, long peerWinSize) {
+	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, int maxRcvWinSize, int peerWinSize) {
 		this(IP, UDPport);
 		this.dataInQueue = dataInQueue;
 		this.dataOutQueue = dataOutQueue;
@@ -51,6 +50,7 @@ public class RTPSocket {
 		for (int i = 0; i < arrays.length; i++) {
 			totalSize += ((byte[]) arrays[i]).length;
 		}
+		
 
 		byte[] allDataArr = new byte[totalSize]; //this byte array will contain all of the data from the stream so far and will be returned to the application
 		int amtCopiedSoFar = 0;
@@ -100,7 +100,7 @@ public class RTPSocket {
 	protected void transferBufferToDataInQueue() {
 		long seqNum = highestSeqNumGivenToApplication + 1;
 		boolean miss = false;
-		while (!miss) { //while the packet with the next seqNum can be found in the buffer:
+		seqNumLoop: while (!miss) { //while the packet with the next seqNum can be found in the buffer:
 			for (Packet packet: bufferList) {
 				if (packet.seqNum == seqNum) {
 					byte[] dataBytes = packet.data;
@@ -110,7 +110,8 @@ public class RTPSocket {
 					highestSeqNumGivenToApplication = seqNum;
 					miss = false;
 					System.out.println("added seqNum " + seqNum + " to application in queue with size " + dataBytes.length);
-					continue;
+					seqNum++;
+					continue seqNumLoop;
 				}
 			}
 			miss = true;

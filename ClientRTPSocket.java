@@ -14,10 +14,10 @@ public class ClientRTPSocket {
 	private InetAddress serverIPAddress;
 	private int serverUDPPort;
 	DatagramSocket socket;
-	long maxWinSize; //max window size in packets
+	int maxWinSize; //max window size in packets
 	int seqNum;
 
-	public ClientRTPSocket(InetAddress IPAddress, int UDPport, long maxWinSize) {
+	public ClientRTPSocket(InetAddress IPAddress, int UDPport, int maxWinSize) {
 		this.serverIPAddress = IPAddress;
 		this.serverUDPPort = UDPport;
 		this.seqNum = 0;
@@ -36,12 +36,13 @@ public class ClientRTPSocket {
 		}
 
 		// connection initiation section
-		Packet rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT, 0);
+		Packet rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT, 0, maxWinSize);
 		DatagramPacket connInitPacket = new DatagramPacket(rtpInitPacket.getBytes(), rtpInitPacket.getBytes().length, serverIPAddress, serverUDPPort);
 
 		
 		try {
 			socket.send(connInitPacket);
+			System.out.println("sent connInitPacket of size: " + rtpInitPacket.getBytes().length);
 		} catch (IOException e) {
 			System.out.println("issue sending connInitPacket");
 			System.exit(-1);
@@ -57,11 +58,12 @@ public class ClientRTPSocket {
 		}
 		
 		Packet received = new Packet(rcvdBytes);
+		System.out.println("received a response to our connection request. Is it a connectioninit");
 
-		if (received.isConnectionInitConfirmAck()) {
+		if (received.isConnectionInitConfirm()) {
 			//send the last part of the 3-way handshake
 			System.out.println("received initConnectionConfirm, ACKING");
-			rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM_ACK, 0);
+			rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM_ACK, 0, maxWinSize);
 			DatagramPacket connInitLastPacket = new DatagramPacket(rtpInitPacket.getBytes(), rtpInitPacket.getBytes().length, serverIPAddress, serverUDPPort);
 			try {
 				socket.send(connInitLastPacket);
@@ -73,7 +75,7 @@ public class ClientRTPSocket {
 			ConcurrentLinkedQueue<byte[]> dataInQueue = new ConcurrentLinkedQueue<>();
 			ConcurrentLinkedQueue<byte[]> dataOutQueue = new ConcurrentLinkedQueue<>();
 			
-			long peerWinSize = 500;
+			int peerWinSize = 500;
 
 			RTPSocket rtpSocket = new RTPSocket(serverIPAddress, serverUDPPort, dataInQueue, dataOutQueue, maxWinSize, peerWinSize);
 			ClientThread clientThread = new ClientThread(socket, rtpSocket);

@@ -1,7 +1,9 @@
+/**
+ * TODO: timeouts
+ */
 import java.io.*;
 import java.net.*;
 import java.util.*;
-import org.json.simple.*;
 import java.util.concurrent.*;
 
 public class ServerRTPSocket {
@@ -10,10 +12,10 @@ public class ServerRTPSocket {
 	private static RTPSocket readerSocket; //will be created by the server thread when accept is called
 	private static Object lock = new Object();
 	private static final int TIMEOUT = 50; //50 ms receive timeout
-	private static long maxWinSize; //the maximum receive window size in packets
+	private static int maxWinSize; //the maximum receive window size in packets
 
 
-	public ServerRTPSocket(int UDPport, long maxWinSize) {
+	public ServerRTPSocket(int UDPport, int maxWinSize) {
 		DatagramSocket socket = null;
 		this.maxWinSize = maxWinSize;
 		msgsForThread = new ConcurrentLinkedQueue<>();
@@ -62,7 +64,7 @@ public class ServerRTPSocket {
 		private InetAddress connReqAddr; //address of client requesting a connection
 		private int connReqPort; //port of client requesting a connection
 		private List<RTPSocket> rtpSockets;
-		long peerWinSize; //the window size of the peer who we are currently setting up a connection to
+		private int  peerWinSize; //the window size of the peer who we are currently setting up a connection to
 		
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {
@@ -101,64 +103,56 @@ public class ServerRTPSocket {
 				}
 
 				if (receivedSomething) {
-					String rcvdString = null;
-					try {
-						rcvdString = new String(rcvPkt.getData(), ENCODING);
-					} catch (UnsupportedEncodingException e) {
-						System.out.println("unsupported encoding while decoding udp message");
-						System.exit(-1);
-					}
-					rcvdString = rcvdString.substring(0, rcvdString.lastIndexOf("\n")); //get rid of extra bytes on end of stringg
-					JSONObject received = (JSONObject) JSONValue.parse(rcvdString);
+					Packet received = new Packet(rcvdBytes);
+					System.out.println("got a packet! ");
 
 					//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
-					if (received.get("type").equals("initConnection") && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
+					if (received.isConnectionInit() && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
 						acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
 						connReqAddr = rcvPkt.getAddress();
 						connReqPort = rcvPkt.getPort();
-						peerWinSize = (Long) received.get("winSize");
+						peerWinSize = 500; //FIX
 
-					} else if (received.get("type").equals("initConnectionConfirmAck") //received last part of 3-way handshake
+					} else if (received.isConnectionInitConfirmAck() //received last part of 3-way handshake
 								&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
 								&& rcvPkt.getAddress().equals(connReqAddr) //make sure that the last part of the handshake came from the client you were expecting it to come from
 								&& rcvPkt.getPort() == connReqPort) {
 						acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
 
-					} else if (received.get("type").equals("data")) {
+					} else if (received.isData()) {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
-						if (((Number) received.get("seqNum")).longValue() <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
+						if (received.seqNum <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
 							if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
 								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 								rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 							}
 
-							// ack the received packet
+							// ack the received packet even if we have it already
 							System.out.println("received: " + received + ", ACKing");
-							JSONObject ackJSON = new JSONObject();
-							ackJSON.put("type", "ACK");
-							ackJSON.put("seqNum",  received.get("seqNum"));
+							Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.rcvWinSize);
 
 							
 							try {
-								socket.send(jsonToPacket(ackJSON, rcvPkt.getAddress(), rcvPkt.getPort()));
+								socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
 							} catch (IOException e) {
 								System.out.println("issue sending ACK");
 							}
+
 						} else {
 							System.out.println("had to reject a packet since it wouldn't fit in buffer");
 						}
-					} else if (received.get("type").equals("ACK")) {
+					} else if (received.isAck()) {
 						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
 						System.out.println("got an ack: " + received);
 						//stop caring about packets you've sent once they are ACKed
-						Iterator<JSONObject> pListIter = rtpSocket.unAckedPackets.iterator();
+						Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
 						while (pListIter.hasNext()) {
-							JSONObject packet = pListIter.next();
-							System.out.println("packet seqNum: " + packet.get("seqNum"));
-							System.out.println("ack seqNum: " + received.get("seqNum"));
-							if (((Number) packet.get("seqNum")).longValue() == ((Number) received.get("seqNum")).longValue()) {
+							Packet packet = pListIter.next();
+							System.out.println("packet seqNum: " + packet.seqNum);
+							System.out.println("ack seqNum: " + received.seqNum);
+							if (packet.seqNum == received.seqNum) {
 								pListIter.remove();
 								rtpSocket.unAckedPktToTimeSentMap.remove(packet);
 								System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
@@ -166,7 +160,7 @@ public class ServerRTPSocket {
 							}
 						}
 
-						long seqNum = ((Number) received.get("seqNum")).longValue();
+						long seqNum = received.seqNum;
 						if (seqNum > rtpSocket.highestSeqNumAcked) {
 							rtpSocket.highestSeqNumAcked = seqNum;
 						}
@@ -176,18 +170,9 @@ public class ServerRTPSocket {
 						System.out.println("received connection request");
 						System.out.println("responding...");
 
-						//responding to connection request
-						JSONObject connReqRespMsgJSON = new JSONObject();
-						connReqRespMsgJSON.put("type", "initConnectionConfirm");
-						connReqRespMsgJSON.put("winSize", maxWinSize);
-						System.out.println(connReqRespMsgJSON);
-						byte[] connReqRespBytes = null;
-						try {
-							connReqRespBytes = (connReqRespMsgJSON.toString() + "\n").getBytes(ENCODING);
-						} catch (UnsupportedEncodingException e) {
-							System.out.println("unsupported encoding");
-							System.exit(-1);
-						}
+						Packet connReqRespPkt = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM, 0, maxWinSize);
+						byte[] connReqRespBytes = connReqRespPkt.getBytes();
+
 
 						DatagramPacket connReqRespMsg = new DatagramPacket(connReqRespBytes, connReqRespBytes.length, connReqAddr, connReqPort);
 						try {
@@ -214,6 +199,7 @@ public class ServerRTPSocket {
 
 				//for every RTPSocket, send stuff the socket wants to send (to clients)
 				for (RTPSocket rtpSocket: rtpSockets) {
+						
 					//send data
 					Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
 					long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer
@@ -222,7 +208,7 @@ public class ServerRTPSocket {
 						int seqNum = rtpSocket.seqNum;
 
 						if (seqNum <= highestAllowableSeqNum) {
-							byte[] sendBytes = dataOutQueueItr.next();
+							byte[] sendBytes = dataOutQueueItr.next(); //the data to send
 							rtpSocket.totalBytesSent += sendBytes.length;
 							System.out.println("-----------");
 							System.out.println("highestAllowableSeqNum: " + highestAllowableSeqNum);
@@ -231,48 +217,25 @@ public class ServerRTPSocket {
 							System.out.println("highestSeqNumAcked by peer: " + rtpSocket.highestSeqNumAcked);
 							dataOutQueueItr.remove();
 							//put the data in a packet and send it
-							String dataAsString = null;
-							try {
-								dataAsString = new String(sendBytes, ENCODING);
-							} catch (UnsupportedEncodingException e) {
-								System.out.println ("issue encoding");
-							}
-							
-							JSONObject packetJSON = new JSONObject();
-							packetJSON.put("type", "data");
-							packetJSON.put("data", dataAsString);
-							packetJSON.put("seqNum", rtpSocket.seqNum);
-							rtpSocket.seqNum++;
+							Packet packet = new Packet(sendBytes, Packet.DATA, rtpSocket.seqNum++, rtpSocket.rcvWinSize); //the rtp packet FIX make sure winsize is right
 
-							DatagramPacket sndPkt = jsonToPacket(packetJSON, rtpSocket.IP, rtpSocket.UDPport);
+							DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
 							try {
+								System.out.println("sending a packet!");
 								socket.send(sndPkt);
 								System.out.println("# of unacked packets increased to: " + rtpSocket.unAckedPackets.size());
-								System.out.println("sent: " + dataAsString);
+								//System.out.println("sent: " + Arrays.toString(packet.getBytes()));
 							} catch (IOException e) {
 								System.out.println("issue sending packet");
 							}
-							rtpSocket.unAckedPackets.add(packetJSON);
-							rtpSocket.unAckedPktToTimeSentMap.put(packetJSON, System.currentTimeMillis());
+							rtpSocket.unAckedPackets.add(packet);
+							rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 						} else { //the sequence number of this packet would be too high for the remote's buffer. Stop trying to send data after this iteration
 							seqNumsTooHigh = true;
 						}
-
 					}
 				}
 			}
-		}
-
-		private DatagramPacket jsonToPacket(JSONObject json, InetAddress destIP, int destPort) {
-			byte[] bytes = null;
-			try {
-				bytes = (json.toString() + "\n").getBytes(ENCODING);
-			} catch (UnsupportedEncodingException e) {
-				System.out.println("unsupported encoding");
-				System.exit(-1);
-			}
-			DatagramPacket packet = new DatagramPacket(bytes, bytes.length, destIP, destPort);
-			return packet;
 		}
 
 	}

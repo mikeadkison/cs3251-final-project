@@ -42,13 +42,13 @@ public class ClientThread extends Thread {
 					System.out.println("highestSeqNumAcked by peer: " + rtpSocket.highestSeqNumAcked);
 					dataOutQueueItr.remove();
 					//put the data in a packet and send it
-					Packet packet = new Packet(sendBytes, Packet.DATA, rtpSocket.seqNum++); //the rtp packet
+					Packet packet = new Packet(sendBytes, Packet.DATA, rtpSocket.seqNum++, rtpSocket.rcvWinSize); //the rtp packet
 
 					DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
 					try {
 						socket.send(sndPkt);
 						System.out.println("# of unacked packets increased to: " + rtpSocket.unAckedPackets.size());
-						System.out.println("sent: " + Arrays.toString(packet.getBytes()));
+						//System.out.println("sent: " + Arrays.toString(packet.getBytes()));
 					} catch (IOException e) {
 						System.out.println("issue sending packet");
 					}
@@ -59,7 +59,7 @@ public class ClientThread extends Thread {
 				}
 			}
 
-			//resend unacked packets which have timed out
+			/*//resend unacked packets which have timed out
 			for (Packet packet: rtpSocket.unAckedPktToTimeSentMap.keySet()) {
 				long timeSent = rtpSocket.unAckedPktToTimeSentMap.get(packet);
 				if (System.currentTimeMillis() - timeSent > ACK_TIMEOUT) { //ack not received in time, so resend
@@ -71,7 +71,7 @@ public class ClientThread extends Thread {
 					}
 					rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 				}
-			}
+			}*/
 
 			//receive data
 			boolean receivedSomething = true;
@@ -89,7 +89,7 @@ public class ClientThread extends Thread {
 			if (receivedSomething) {
 				Packet received = new Packet(rcvdBytes);
 
-				if (!received.isAck) {
+				if (!received.isAck()) {
 					if (received.seqNum <= rtpSocket.getHighestAcceptableRcvSeqNum()) { //check if packet fits in buffer (rceive window) of the socket on this computer
 						if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
 							rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
@@ -97,7 +97,7 @@ public class ClientThread extends Thread {
 						}
 						// ack the received packet even if we have it already
 						System.out.println("received: " + received + ", ACKing");
-						Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum);
+						Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.rcvWinSize);
 
 						
 						try {
@@ -108,7 +108,7 @@ public class ClientThread extends Thread {
 					} else {
 						System.out.println("had to reject a packet since it wouldn't fit in buffer");
 					}
-				} else if (received.isAck) {
+				} else if (received.isAck()) {
 					System.out.println("got an ack: " + received);
 					//stop caring about packets you've sent once they are ACKed
 					Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
