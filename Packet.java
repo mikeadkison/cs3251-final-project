@@ -76,6 +76,13 @@ public class Packet {
 		checksumMatch = true;
 	}
 
+	/**
+	 * @return the size of the packet header in bytes
+	 */
+	public static int getHeaderSize() {
+		return CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE;
+	}
+
 	 /** FLAGS: name  #
 	 *        ACK | 1
 	 *        connectionInit | 2 // first of 3 way handshake
@@ -117,6 +124,10 @@ public class Packet {
 		return packetBytes;
 	}
 
+	protected int getDataSize() {
+		return data.length;
+	}
+
 	private byte getFlagByte(byte[] packetBytes) {
 		return packetBytes[CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE]; //the flag byte is right after the bytes which specify packet size
 	}
@@ -153,6 +164,8 @@ public class Packet {
     }
 
     private int getWinSize(byte[] packet) {
+    	System.out.println("getting winSize: ");
+    	System.out.println(Arrays.toString(packet));
     	return ByteBuffer.wrap(packet, CHECKSUM_SIZE, WINDOW_SIZE_SIZE).getInt();
     }
 
@@ -162,6 +175,9 @@ public class Packet {
 
     protected byte[] constructPacket(byte[] data, byte flagByte, int seqNum, int winSize) {
     	byte[] packetWithoutChecksum = new byte[WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length];
+
+    	byte[] winSizeBytes = intToBytes(winSize); //put the window size in the packet
+    	System.arraycopy(winSizeBytes, 0, packetWithoutChecksum, 0, WINDOW_SIZE_SIZE);
 
     	char packetSize = (char) (CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length); //the size in bytes of the packet
     	byte[] packetSizeBytes = charToBytes(packetSize);

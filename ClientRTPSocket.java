@@ -72,10 +72,11 @@ public class ClientRTPSocket {
 				System.exit(-1);
 			}
 
-			ConcurrentLinkedQueue<byte[]> dataInQueue = new ConcurrentLinkedQueue<>();
-			ConcurrentLinkedQueue<byte[]> dataOutQueue = new ConcurrentLinkedQueue<>();
+			ConcurrentLinkedDeque<byte[]> dataInQueue = new ConcurrentLinkedDeque<>();
+			ConcurrentLinkedDeque<byte[]> dataOutQueue = new ConcurrentLinkedDeque<>();
 			
-			int peerWinSize = 500;
+			int peerWinSize = received.winSize;
+			System.out.println("peer win size: " + peerWinSize);
 
 			RTPSocket rtpSocket = new RTPSocket(serverIPAddress, serverUDPPort, dataInQueue, dataOutQueue, maxWinSize, peerWinSize);
 			ClientThread clientThread = new ClientThread(socket, rtpSocket);

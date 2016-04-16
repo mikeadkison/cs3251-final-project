@@ -130,7 +130,7 @@ public class ServerRTPSocket {
 							}
 
 							// ack the received packet even if we have it already
-							System.out.println("received: " + received + ", ACKing");
+							/*System.out.println("received: " + received + ", ACKing");
 							Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.rcvWinSize);
 
 							
@@ -138,7 +138,7 @@ public class ServerRTPSocket {
 								socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
 							} catch (IOException e) {
 								System.out.println("issue sending ACK");
-							}
+							}*/
 
 						} else {
 							System.out.println("had to reject a packet since it wouldn't fit in buffer");
@@ -188,7 +188,8 @@ public class ServerRTPSocket {
 						System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
 						//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 						acceptStatus = null;
-						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedQueue<>(), new ConcurrentLinkedQueue<>(), maxWinSize, peerWinSize);
+						System.out.println("creating rtpsocket with maxwinsize " + maxWinSize);
+						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<>(), new ConcurrentLinkedDeque<>(), maxWinSize, peerWinSize);
 						rtpSockets.add(socketForClient);
 						synchronized(lock) {
 							readerSocket = socketForClient;

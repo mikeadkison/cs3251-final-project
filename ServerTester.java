@@ -6,7 +6,7 @@ public class ServerTester {
 	private static final String ENCODING = "ISO-8859-1";
 
 	public static void main(String[] args) {
-		ServerRTPSocket serverSocket = new ServerRTPSocket(8081, 5);
+		ServerRTPSocket serverSocket = new ServerRTPSocket(8081, 4000);
 		RTPSocket rcvSocket = serverSocket.accept();
 		while (true) {
 			try {

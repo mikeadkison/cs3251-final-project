@@ -6,8 +6,8 @@ import java.util.concurrent.*;
 public class RTPSocket {
 	protected InetAddress IP; //ip of peer
 	protected int UDPport; //port of peer
-	protected ConcurrentLinkedQueue<byte[]> dataInQueue; //the queue that holds data ready to be read
-	protected ConcurrentLinkedQueue<byte[]> dataOutQueue; //the queue where the api puts data that it wants sent out
+	protected ConcurrentLinkedDeque<byte[]> dataInQueue; //the queue that holds data ready to be read
+	protected ConcurrentLinkedDeque<byte[]> dataOutQueue; //the queue where the api puts data that it wants sent out
 	protected int seqNum;
 	protected int rcvWinSize; //the current size of the window (the buffer)
 	private int maxRcvWinSize; //the biggest the window can get
@@ -18,9 +18,10 @@ public class RTPSocket {
 	protected final List<Packet> unAckedPackets = new ArrayList<>();
 	protected final Map<Packet, Long> unAckedPktToTimeSentMap = new HashMap<>();
 	protected long highestSeqNumAcked; //highest seq num that we've sent that we received an ack for from our peer
+	protected int numBytesUnacked;
 	protected int totalBytesSent;
 
-	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedQueue<byte[]> dataInQueue, ConcurrentLinkedQueue<byte[]> dataOutQueue, int maxRcvWinSize, int peerWinSize) {
+	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedDeque<byte[]> dataInQueue, ConcurrentLinkedDeque<byte[]> dataOutQueue, int maxRcvWinSize, int peerWinSize) {
 		this(IP, UDPport);
 		this.dataInQueue = dataInQueue;
 		this.dataOutQueue = dataOutQueue;
@@ -68,13 +69,14 @@ public class RTPSocket {
 	 * data is split into 500 byte sections to leave lots of room for packet headers and fluff
 	 */
 	public void send(byte[] sendBytes) {
-		final int DATA_PER_PACKET = 500;
+		/*final int DATA_PER_PACKET = 500;
 		for (int offset = 0; offset < sendBytes.length; offset += DATA_PER_PACKET) {
 			int length = offset + DATA_PER_PACKET <= sendBytes.length ? DATA_PER_PACKET : sendBytes.length - offset; //how much data will be copied from sendBytes
 			byte[] dataToSend = new byte[length];
 			System.arraycopy(sendBytes, offset, dataToSend, 0, length);
 			dataOutQueue.add(dataToSend);
-		}
+		}*/
+		dataOutQueue.add(sendBytes);
 	}
 
 	@Override

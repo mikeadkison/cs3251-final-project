@@ -15,12 +15,12 @@ public class ClientTester {
         }
 
 
-		RTPSocket clientSocket = (new ClientRTPSocket(addr, 8081, 5)).connect();
+		RTPSocket clientSocket = (new ClientRTPSocket(addr, 8081, 1000)).connect();
 
 
 
 		try {
-			clientSocket.send("hellos".getBytes(ENCODING));
+			clientSocket.send(BIG_STRING.getBytes(ENCODING));
 
 		} catch (UnsupportedEncodingException e) {
 			System.out.println("issue wwith encoding");
