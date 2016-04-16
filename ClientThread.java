@@ -59,7 +59,7 @@ public class ClientThread extends Thread {
 				}
 			}
 
-			/*//resend unacked packets which have timed out
+			//resend unacked packets which have timed out
 			for (Packet packet: rtpSocket.unAckedPktToTimeSentMap.keySet()) {
 				long timeSent = rtpSocket.unAckedPktToTimeSentMap.get(packet);
 				if (System.currentTimeMillis() - timeSent > ACK_TIMEOUT) { //ack not received in time, so resend
@@ -71,7 +71,7 @@ public class ClientThread extends Thread {
 					}
 					rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 				}
-			}*/
+			}
 
 			//receive data
 			boolean receivedSomething = true;

@@ -65,6 +65,7 @@ public class ServerRTPSocket {
 		private int connReqPort; //port of client requesting a connection
 		private List<RTPSocket> rtpSockets;
 		private int  peerWinSize; //the window size of the peer who we are currently setting up a connection to
+		private static final int ACK_TIMEOUT = 500; //how long to wait for ACK before resending in ms
 		
 
 		public ServerThread(DatagramSocket socket, ConcurrentLinkedQueue<Msg> msgs) {
@@ -199,6 +200,21 @@ public class ServerRTPSocket {
 
 				//for every RTPSocket, send stuff the socket wants to send (to clients)
 				for (RTPSocket rtpSocket: rtpSockets) {
+
+					//resend unacked packets which have timed out
+					for (Packet packet: rtpSocket.unAckedPktToTimeSentMap.keySet()) {
+						long timeSent = rtpSocket.unAckedPktToTimeSentMap.get(packet);
+						if (System.currentTimeMillis() - timeSent > ACK_TIMEOUT) { //ack not received in time, so resend
+							DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
+							try {
+								socket.send(sndPkt);
+							} catch (IOException e) {
+								System.out.println("issue sending packet");
+							}
+							rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
+						}
+					}
+
 						
 					//send data
 					Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
