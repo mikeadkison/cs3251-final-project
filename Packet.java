@@ -96,7 +96,7 @@ public class Packet {
 	protected int getPacketSize() {
 		return packetBytes.length;
 	}
-	
+
 	protected boolean isData() {
 		return flag == DATA;
 	}

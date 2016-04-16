@@ -18,7 +18,7 @@ public class ClientTester {
 		RTPSocket clientSocket = (new ClientRTPSocket(addr, 8081, 1000)).connect();
 
 
-
+		
 		try {
 			clientSocket.send("hello".getBytes(ENCODING));
 

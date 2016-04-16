@@ -20,6 +20,19 @@ public class ClientThread extends Thread {
 
 	}
 
+	private void ack(Packet toAck, RTPSocket rtpSocket, DatagramPacket rcvPkt) {
+		// ack the received packet even if we have it already
+		System.out.println("received: " + toAck.seqNum + ", ACKing");
+		Packet ackPack = new Packet(new byte[0], Packet.ACK, toAck.seqNum, rtpSocket.maxRcvWinSize);
+
+		
+		try {
+			socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
+		} catch (IOException e) {
+			System.out.println("issue sending ACK");
+		}
+	}
+
 	public void run() {
 		System.out.println("client thread started");
 		//where the work of the thread gets done
@@ -102,54 +115,46 @@ public class ClientThread extends Thread {
 
 			if (receivedSomething) {
 				Packet received = new Packet(rcvdBytes);
-
-				if (received.isData()) {
-					if (received.getPacketSize() <= rtpSocket.rcvWinSize //check if packet fits in buffer (rceive window) of the socket on this computer
-							&& received.checksumMatch) { //make sure the checksum matches the rest of the packet
-						if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
-							rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-							rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
-							rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
-						}
-						// ack the received packet even if we have it already
-						System.out.println("received: " + received.seqNum + ", ACKing");
-						Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.maxRcvWinSize);
-
-						
-						try {
-							socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
-						} catch (IOException e) {
-							System.out.println("issue sending ACK");
+				if (received.checksumMatch) {//first make sure the checksum matches the rest of the packet
+					if (received.isData()) {	
+						if (rtpSocket.bufferList.contains(received)) {
+							ack(received, rtpSocket, rcvPkt);
+						} else if (received.getPacketSize() <= rtpSocket.rcvWinSize) { //check if packet fits in buffer (rceive window) of the socket on this computer
+								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+								rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
+								rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+								ack(received, rtpSocket, rcvPkt);
 						}
 
 						rtpSocket.peerWinSize = received.winSize;
-					} else {
-						System.out.println("had to reject a packet since it wouldn't fit in buffer");
-					}
-				} else if (received.isAck()) {
-					System.out.println("got an ack: " + received.seqNum);
-					//stop caring about packets you've sent once they are ACKed
-					Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
-					while (pListIter.hasNext()) {
-						Packet packet = pListIter.next();
-						System.out.println("packet seqNum: " +  packet.seqNum);
-						System.out.println("ack seqNum: " + received.seqNum);
-						if (packet.seqNum == received.seqNum) {
-							pListIter.remove();
-							rtpSocket.unAckedPktToTimeSentMap.remove(packet);
-							rtpSocket.numBytesUnacked -= packet.getDataSize();
-							System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
-							break;
+
+					} else if (received.isAck()) {
+						System.out.println("got an ack: " + received.seqNum);
+						//stop caring about packets you've sent once they are ACKed
+						Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
+						while (pListIter.hasNext()) {
+							Packet packet = pListIter.next();
+							System.out.println("packet seqNum: " +  packet.seqNum);
+							System.out.println("ack seqNum: " + received.seqNum);
+							if (packet.seqNum == received.seqNum) {
+								pListIter.remove();
+								rtpSocket.unAckedPktToTimeSentMap.remove(packet);
+								rtpSocket.numBytesUnacked -= packet.getDataSize();
+								System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
+								break;
+							}
 						}
-					}
 
-					int seqNum = received.seqNum;
-					if (seqNum > rtpSocket.highestSeqNumAcked) {
-						rtpSocket.highestSeqNumAcked = seqNum;
-					}
+						int seqNum = received.seqNum;
+						if (seqNum > rtpSocket.highestSeqNumAcked) {
+							rtpSocket.highestSeqNumAcked = seqNum;
+						}
 
+					}
 				}
 			}
 		}
 	}
+
+	
 }

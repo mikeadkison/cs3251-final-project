@@ -108,97 +108,87 @@ public class ServerRTPSocket {
 					Packet received = new Packet(rcvdBytes);
 					System.out.println("got a packet! ");
 
-					//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
-					if (received.isConnectionInit() && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
-						acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
-						connReqAddr = rcvPkt.getAddress();
-						connReqPort = rcvPkt.getPort();
-						peerWinSize = 500; //FIX
+					if (received.checksumMatch) { //only do stuff with packet if it isnt corrupt
+						//check if the packet is a connection initiation packet from the client( the first packet of a 3-wway handshake
+						if (received.isConnectionInit() && AcceptStatus.AVAILABLE_FOR_CONNECTION == acceptStatus) { //if packet is a connection initilaization packet and seerver app has called accept()
+							acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
+							connReqAddr = rcvPkt.getAddress();
+							connReqPort = rcvPkt.getPort();
+							peerWinSize = 500; //FIX
 
-					} else if (received.isConnectionInitConfirmAck() //received last part of 3-way handshake
-								&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
-								&& rcvPkt.getAddress().equals(connReqAddr) //make sure that the last part of the handshake came from the client you were expecting it to come from
-								&& rcvPkt.getPort() == connReqPort) {
-						acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
+						} else if (received.isConnectionInitConfirmAck() //received last part of 3-way handshake
+									&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
+									&& rcvPkt.getAddress().equals(connReqAddr) //make sure that the last part of the handshake came from the client you were expecting it to come from
+									&& rcvPkt.getPort() == connReqPort) {
+							acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
 
-					} else if (received.isData()) {
-						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
+						} else if (received.isData()) {
+							RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
-						if (received.getPacketSize() <= rtpSocket.rcvWinSize //check if packet fits in buffer (rceive window) of the socket on this computer
-								&& received.checksumMatch) { //make sure the checksum matches the rest of the packet
-							if (!rtpSocket.bufferList.contains(received)) { //make sure we haven't received this packet already CONSIDER SIMPLY CHECKING SEQUENCE NUMBERS
-								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-								rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
-								rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
-							}
-							// ack the received packet even if we have it already
-							System.out.println("received: " + received.seqNum + ", ACKing");
-							Packet ackPack = new Packet(new byte[0], Packet.ACK, received.seqNum, rtpSocket.maxRcvWinSize);
-
-							
-							try {
-								socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
-							} catch (IOException e) {
-								System.out.println("issue sending ACK");
+							if (rtpSocket.bufferList.contains(received)) {
+								ack(received, rtpSocket, rcvPkt);
+							} else if (received.getPacketSize() <= rtpSocket.rcvWinSize) { //check if packet fits in buffer (rceive window) of the socket on this computer
+									rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+									rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
+									rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+									ack(received, rtpSocket, rcvPkt);
 							}
 
 							rtpSocket.peerWinSize = received.winSize;
-						} else {
-							System.out.println("had to reject a packet since it wouldn't fit in buffer");
-						}
-					} else if (received.isAck()) {
-						RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
+						} else if (received.isAck()) {
+							RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
-						System.out.println("got an ack: " + received.seqNum);
-						//stop caring about packets you've sent once they are ACKed
-						Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
-						while (pListIter.hasNext()) {
-							Packet packet = pListIter.next();
-							System.out.println("packet seqNum: " +  packet.seqNum);
-							System.out.println("ack seqNum: " + received.seqNum);
-							if (packet.seqNum == received.seqNum) {
-								pListIter.remove();
-								rtpSocket.unAckedPktToTimeSentMap.remove(packet);
-								rtpSocket.numBytesUnacked -= packet.getDataSize();
-								System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
-								break;
+							System.out.println("got an ack: " + received.seqNum);
+							//stop caring about packets you've sent once they are ACKed
+							Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
+							while (pListIter.hasNext()) {
+								Packet packet = pListIter.next();
+								System.out.println("packet seqNum: " +  packet.seqNum);
+								System.out.println("ack seqNum: " + received.seqNum);
+								if (packet.seqNum == received.seqNum) {
+									pListIter.remove();
+									rtpSocket.unAckedPktToTimeSentMap.remove(packet);
+									rtpSocket.numBytesUnacked -= packet.getDataSize();
+									System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
+									break;
+								}
 							}
+
+							int seqNum = received.seqNum;
+							if (seqNum > rtpSocket.highestSeqNumAcked) {
+								rtpSocket.highestSeqNumAcked = seqNum;
+							}
+
 						}
 
-						int seqNum = received.seqNum;
-						if (seqNum > rtpSocket.highestSeqNumAcked) {
-							rtpSocket.highestSeqNumAcked = seqNum;
-						}
+						if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
+							System.out.println("received connection request");
+							System.out.println("responding...");
 
-					}
-
-					if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
-						System.out.println("received connection request");
-						System.out.println("responding...");
-
-						Packet connReqRespPkt = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM, 0, maxWinSize);
-						byte[] connReqRespBytes = connReqRespPkt.getBytes();
+							Packet connReqRespPkt = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM, 0, maxWinSize);
+							byte[] connReqRespBytes = connReqRespPkt.getBytes();
 
 
-						DatagramPacket connReqRespMsg = new DatagramPacket(connReqRespBytes, connReqRespBytes.length, connReqAddr, connReqPort);
-						try {
-							socket.send(connReqRespMsg);
-						} catch (IOException e) {
-							System.out.println("issue sending connReqRespMsg");
-							System.exit(-1);
-						}
-						acceptStatus = AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST;
+							DatagramPacket connReqRespMsg = new DatagramPacket(connReqRespBytes, connReqRespBytes.length, connReqAddr, connReqPort);
+							try {
+								socket.send(connReqRespMsg);
+							} catch (IOException e) {
+								System.out.println("issue sending connReqRespMsg");
+								System.exit(-1);
+							}
+							acceptStatus = AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST;
 
-					} else if (acceptStatus == AcceptStatus.RECEIVED_ACK_TO_RESPONSE) {
-						System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
-						//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
-						acceptStatus = null;
-						System.out.println("creating rtpsocket with maxwinsize " + maxWinSize);
-						RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<>(), new ConcurrentLinkedDeque<>(), maxWinSize, peerWinSize);
-						rtpSockets.add(socketForClient);
-						synchronized(lock) {
-							readerSocket = socketForClient;
-							lock.notify();
+						} else if (acceptStatus == AcceptStatus.RECEIVED_ACK_TO_RESPONSE) {
+							System.out.println("3-way handshake complete for client at" + connReqAddr + ":" + connReqPort);
+							//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
+							acceptStatus = null;
+							System.out.println("creating rtpsocket with maxwinsize " + maxWinSize);
+							RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<>(), new ConcurrentLinkedDeque<>(), maxWinSize, peerWinSize);
+							rtpSockets.add(socketForClient);
+							synchronized(lock) {
+								readerSocket = socketForClient;
+								lock.notify();
+							}
 						}
 					}
 				}
@@ -270,6 +260,19 @@ public class ServerRTPSocket {
 				
 					}
 				}
+			}
+		}
+
+		private void ack(Packet toAck, RTPSocket rtpSocket, DatagramPacket rcvPkt) {
+			// ack the received packet even if we have it already
+			System.out.println("received: " + toAck.seqNum + ", ACKing");
+			Packet ackPack = new Packet(new byte[0], Packet.ACK, toAck.seqNum, rtpSocket.maxRcvWinSize);
+
+			
+			try {
+				socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
+			} catch (IOException e) {
+				System.out.println("issue sending ACK");
 			}
 		}
 
