@@ -31,7 +31,7 @@ public class ClientRTPSocket {
 		try {
 			socket = new DatagramSocket();
 		} catch (SocketException e) {
-			System.out.println("unable to create datagram socket");
+			
 			System.exit(-1);
 		}
 
@@ -42,9 +42,9 @@ public class ClientRTPSocket {
 		
 		try {
 			socket.send(connInitPacket);
-			System.out.println("sent connInitPacket of size: " + rtpInitPacket.getBytes().length);
+			
 		} catch (IOException e) {
-			System.out.println("issue sending connInitPacket");
+			
 			System.exit(-1);
 		}
 
@@ -54,21 +54,21 @@ public class ClientRTPSocket {
 		try {
 			socket.receive(rcvPkt);
 		} catch (IOException e) {
-			System.out.println("issue receiving packet during connection setup");
+			
 		}
 		
 		Packet received = new Packet(rcvdBytes);
-		System.out.println("received a response to our connection request. Is it a connectioninit");
+		
 
 		if (received.isConnectionInitConfirm()) {
 			//send the last part of the 3-way handshake
-			System.out.println("received initConnectionConfirm, ACKING");
+			
 			rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM_ACK, 0, maxWinSize);
 			DatagramPacket connInitLastPacket = new DatagramPacket(rtpInitPacket.getBytes(), rtpInitPacket.getBytes().length, serverIPAddress, serverUDPPort);
 			try {
 				socket.send(connInitLastPacket);
 			} catch (IOException e) {
-				System.out.println("issue sending initConnectionConfirmAck");
+				
 				System.exit(-1);
 			}
 
@@ -76,7 +76,7 @@ public class ClientRTPSocket {
 			ConcurrentLinkedDeque<byte[]> dataOutQueue = new ConcurrentLinkedDeque<>();
 			
 			int peerWinSize = received.winSize;
-			System.out.println("peer win size: " + peerWinSize);
+			
 
 			RTPSocket rtpSocket = new RTPSocket(serverIPAddress, serverUDPPort, dataInQueue, dataOutQueue, maxWinSize, peerWinSize);
 			ClientThread clientThread = new ClientThread(socket, rtpSocket);

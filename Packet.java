@@ -42,14 +42,14 @@ public class Packet {
 	 */
 	public Packet(byte[] bufferBytes) {
 		int packetSize = getPacketSize(bufferBytes); //first, cut off the part of the buffer that is free space, not actually being used to hold the packet
-		System.out.println("packet size with checksum: " + packetSize);
+		
 		byte[] packetBytes = new byte[packetSize];
 		this.packetBytes = packetBytes;
 		System.arraycopy(bufferBytes, 0, packetBytes, 0, packetSize);
 
 		byte[] checksumBytesFromPacket = getChecksumFromPacket(packetBytes); //extract the checksum from the received packet
 		byte[] packetWithoutChecksum = withoutChecksum(packetBytes); //remove the checksum bytes from the received packet
-		System.out.println("size without checksum: " + packetWithoutChecksum.length);
+		
 		byte[] checksumBytesCalc = checksum(packetWithoutChecksum);
 		if (!Arrays.equals(checksumBytesFromPacket, checksumBytesCalc)) { //make sure checksum matches rest of packet
 			checksumMatch = false;
@@ -102,8 +102,8 @@ public class Packet {
 	}
 
 	protected boolean isConnectionInit() {
-		System.out.println("is this packet a conn init packet? " + " flag: " + flag);
-		//System.out.println(Arrays.toString(packetBytes));
+		
+		//
 		return flag == CONNECTION_INIT;
 	}
 
@@ -112,8 +112,8 @@ public class Packet {
 	}
 
 	protected boolean isConnectionInitConfirmAck() {
-		System.out.println("is this packet a conn init packet? " + " flag: " + flag);
-		//System.out.println(Arrays.toString(packetBytes));
+		
+		//
 		return flag == CONNECTION_INIT_CONFIRM_ACK;
 	}
 
@@ -210,7 +210,7 @@ public class Packet {
         try {
             msgDigest = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
-            System.out.println("md5 not available for checksum");
+            
             System.exit(-1);
         }
 

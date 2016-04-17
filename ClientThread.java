@@ -22,19 +22,19 @@ public class ClientThread extends Thread {
 
 	private void ack(Packet toAck, RTPSocket rtpSocket, DatagramPacket rcvPkt) {
 		// ack the received packet even if we have it already
-		System.out.println("received: " + toAck.seqNum + ", ACKing");
+		
 		Packet ackPack = new Packet(new byte[0], Packet.ACK, toAck.seqNum, rtpSocket.maxRcvWinSize);
 
 		
 		try {
 			socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, rcvPkt.getAddress(), rcvPkt.getPort()));
 		} catch (IOException e) {
-			System.out.println("issue sending ACK");
+			
 		}
 	}
 
 	public void run() {
-		System.out.println("client thread started");
+		
 		//where the work of the thread gets done
 
 		while (true) {
@@ -47,7 +47,7 @@ public class ClientThread extends Thread {
 			if (rtpSocket.dataOutQueue.peek() != null
 					&& winSpaceLeft > Packet.getHeaderSize()) { //if use while, not if could have some issues with dominating the connection if the queue is constantly populated
 				if (winSpaceLeft > 0) {
-					System.out.println("win space left: " + winSpaceLeft);
+					
 				}
 
 				byte[] removedBytes = rtpSocket.dataOutQueue.poll();
@@ -66,13 +66,13 @@ public class ClientThread extends Thread {
 				try {
 					socket.send(sndPkt);
 				} catch (IOException e) {
-					System.out.println("issue sending packet");
+					
 				}
 				rtpSocket.unAckedPackets.add(packet);
 				rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 				rtpSocket.totalBytesSent += amtOfDataToPutInPacket;
 				rtpSocket.numBytesUnacked += amtOfDataToPutInPacket;
-				//System.out.println("# of unacked bytes increased to: " + rtpSocket.numBytesUnacked);
+				//
 				
 
 
@@ -94,7 +94,7 @@ public class ClientThread extends Thread {
 					try {
 						socket.send(sndPkt);
 					} catch (IOException e) {
-						System.out.println("issue sending packet");
+						
 					}
 					rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
 				}
@@ -110,7 +110,7 @@ public class ClientThread extends Thread {
 			} catch (SocketTimeoutException e) {
 				receivedSomething = false;
 			} catch (IOException e) {
-				System.out.println("issue receiving on socket" + socket);
+				
 			}
 
 			if (receivedSomething) {
@@ -129,18 +129,18 @@ public class ClientThread extends Thread {
 						rtpSocket.peerWinSize = received.winSize;
 
 					} else if (received.isAck()) {
-						System.out.println("got an ack: " + received.seqNum);
+						
 						//stop caring about packets you've sent once they are ACKed
 						Iterator<Packet> pListIter = rtpSocket.unAckedPackets.iterator();
 						while (pListIter.hasNext()) {
 							Packet packet = pListIter.next();
-							System.out.println("packet seqNum: " +  packet.seqNum);
-							System.out.println("ack seqNum: " + received.seqNum);
+							
+							
 							if (packet.seqNum == received.seqNum) {
 								pListIter.remove();
 								rtpSocket.unAckedPktToTimeSentMap.remove(packet);
 								rtpSocket.numBytesUnacked -= packet.getDataSize();
-								System.out.println("# of unacked packets decreased to: " + rtpSocket.unAckedPackets.size());
+								
 								break;
 							}
 						}
