@@ -10,7 +10,7 @@ import java.net.UnknownHostException;
  *	a wrapper class for running the client
  * expects arguments in the form ip:port student_id requested colummns
  */
-public class dbclientTCP {
+public class dbclientRTP {
 	public static void main(String[] args) {
 		InetAddress serverAddress = null;
 
@@ -29,7 +29,7 @@ public class dbclientTCP {
 		}
 
 		try {
-			ClientTCP client = new ClientTCP(serverAddress, studentID, columnNames, port); //start the client
+			ClientRTP client = new ClientRTP(serverAddress, studentID, columnNames, port); //start the client
 		} catch (IOException e) {
 			System.out.println("client could not connect to server, try checking arguments, make sure server is running");
 		}

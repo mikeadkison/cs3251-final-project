@@ -5,11 +5,11 @@ import java.io.*;
 import java.util.*;
 import java.net.*;
 
-public class ClientTCP {
+public class ClientRTP {
 	private static final String ENCODING = "ISO-8859-1";
 	private static byte newLineByte;
 
-	public ClientTCP(InetAddress serverIP, String studentID, List<String> requestedColumns, int port) throws IOException {
+	public ClientRTP(InetAddress serverIP, String studentID, List<String> requestedColumns, int port) throws IOException {
 		ClientRTPSocket clientRTPSocket = new ClientRTPSocket(serverIP, port, 10000);
 		System.out.println("hi");
 		RTPSocket socket = clientRTPSocket.connect();

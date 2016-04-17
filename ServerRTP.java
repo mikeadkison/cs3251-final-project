@@ -2,12 +2,12 @@ import java.util.*;
 
 import java.io.*;
 
-public class ServerTCP {
+public class ServerRTP {
 	private static final Map<Integer, Map<String, Object>> ID_TO_INFO_MAP = new HashMap<>(); //contains the information of all the students in the "database"
 	private static final String ENCODING = "ISO-8859-1";
 	private static byte newLineByte;
 
-	public ServerTCP(int port) throws IOException, IllegalArgumentException {
+	public ServerRTP(int port) throws IOException, IllegalArgumentException {
 		System.out.println("creating server");
 		try {
 			newLineByte = "\n".getBytes(ENCODING)[0];
