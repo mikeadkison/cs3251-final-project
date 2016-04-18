@@ -117,9 +117,9 @@ public class ClientThread extends Thread {
 				Packet received = new Packet(rcvdBytes);
 				if (received.checksumMatch) {//first make sure the checksum matches the rest of the packet
 					if (received.isData()) {	
-						/*if (rtpSocket.bufferList.contains(received)) {
-							//do nothing ack(received, rtpSocket, rcvPkt);*/
-						if (received.seqNum <= rtpSocket.highestSeqNumGivenToApplication) {
+						if (rtpSocket.bufferList.contains(received)) {
+							ack(received, rtpSocket, rcvPkt);
+						} else if (received.seqNum <= rtpSocket.highestSeqNumGivenToApplication) {
 							ack(received, rtpSocket, rcvPkt);
 							//System.out.println("acked " + received.seqNum + " again");
 						} else {
@@ -128,7 +128,7 @@ public class ClientThread extends Thread {
 							if (received.seqNum <= highestAllowableSeqNum) { //check if packet fits in buffer (rceive window) of the socket on this computer
 								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 								rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
-								rtpSocket.transferBufferToDataInQueue(socket); //give the applications a chunk of data if you can
+								//rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 							} else {
 								//System.out.println("had to reject packet #" + received.seqNum);
 							}
