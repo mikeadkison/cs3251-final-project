@@ -183,7 +183,7 @@ public class ServerRTPSocket {
 							//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 							acceptStatus = null;
 							
-							RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<>(), new ConcurrentLinkedDeque<>(), maxWinSize, peerWinSize);
+							RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<byte[]>(), new ConcurrentLinkedDeque<byte[]>(), maxWinSize, peerWinSize);
 							rtpSockets.add(socketForClient);
 							synchronized(lock) {
 								readerSocket = socketForClient;

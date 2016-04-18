@@ -5,6 +5,7 @@ import java.io.*;
 import java.nio.file.*;
 import org.json.simple.*;
 
+//TODO come up with a better server protocol for signalling when file has ended
 public class FTAServerThread extends Thread {
 	private RTPSocket socket;
 	private static final String ENCODING = "ISO-8859-1";

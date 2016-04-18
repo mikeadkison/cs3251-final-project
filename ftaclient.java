@@ -70,7 +70,7 @@ public class ftaclient {
 				timeLastReceivedData = System.currentTimeMillis();
 				receivedSomething = true;
 			}
-		} while (!receivedSomething || System.currentTimeMillis() - timeLastReceivedData < 3000); //timeout
+		} while (!receivedSomething || System.currentTimeMillis() - timeLastReceivedData < 10000); //timeout
 		
 		FileOutputStream stream = new FileOutputStream("get_" + fileName);
 		try {
