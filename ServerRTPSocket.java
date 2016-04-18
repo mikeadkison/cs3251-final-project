@@ -123,18 +123,22 @@ public class ServerRTPSocket {
 							acceptStatus = AcceptStatus.RECEIVED_ACK_TO_RESPONSE;
 
 						} else if (received.isData()) {
-							RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
+							int index = rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort()));
+							if (index >= 0) {
+								RTPSocket rtpSocket = rtpSockets.get(index);
 
-							if (rtpSocket.bufferList.contains(received)) {
-								ack(received, rtpSocket, rcvPkt);
-							} else if (received.getPacketSize() <= rtpSocket.rcvWinSize) { //check if packet fits in buffer (rceive window) of the socket on this computer
-									rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
-									rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
-									rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+								if (rtpSocket.bufferList.contains(received)) {
 									ack(received, rtpSocket, rcvPkt);
-							}
+								} else if (received.getPacketSize() <= rtpSocket.rcvWinSize) { //check if packet fits in buffer (rceive window) of the socket on this computer
+										rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
+										rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
+										rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+										ack(received, rtpSocket, rcvPkt);
+								}
 
-							rtpSocket.peerWinSize = received.winSize;
+								rtpSocket.peerWinSize = received.winSize;
+
+							}
 						} else if (received.isAck()) {
 							RTPSocket rtpSocket = rtpSockets.get(rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())));
 
@@ -161,38 +165,36 @@ public class ServerRTPSocket {
 
 						}
 
-						if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST) {
-							
-							
-
-							Packet connReqRespPkt = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM, 0, maxWinSize);
-							byte[] connReqRespBytes = connReqRespPkt.getBytes();
-
-
-							DatagramPacket connReqRespMsg = new DatagramPacket(connReqRespBytes, connReqRespBytes.length, connReqAddr, connReqPort);
-							try {
-								socket.send(connReqRespMsg);
-							} catch (IOException e) {
-								
-								System.exit(-1);
-							}
-							acceptStatus = AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST;
-
-						} else if (acceptStatus == AcceptStatus.RECEIVED_ACK_TO_RESPONSE) {
-							
-							//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
-							acceptStatus = null;
-							
-							RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<byte[]>(), new ConcurrentLinkedDeque<byte[]>(), maxWinSize, peerWinSize);
-							rtpSockets.add(socketForClient);
-							synchronized(lock) {
-								readerSocket = socketForClient;
-								lock.notify();
-							}
-						}
+						
 					}
 				}
+				if (acceptStatus == AcceptStatus.RECEIVED_CONNECTION_REQUEST || acceptStatus == AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST) {
+					System.out.println("received connection request");
+					Packet connReqRespPkt = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM, 0, maxWinSize);
+					byte[] connReqRespBytes = connReqRespPkt.getBytes();
 
+
+					DatagramPacket connReqRespMsg = new DatagramPacket(connReqRespBytes, connReqRespBytes.length, connReqAddr, connReqPort);
+					try {
+						socket.send(connReqRespMsg);
+					} catch (IOException e) {
+						
+						System.exit(-1);
+					}
+					acceptStatus = AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST;
+
+				} else if (acceptStatus == AcceptStatus.RECEIVED_ACK_TO_RESPONSE) {
+					System.out.println("received ack to connection request response, returning from accept");
+					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
+					acceptStatus = null;
+					
+					RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<byte[]>(), new ConcurrentLinkedDeque<byte[]>(), maxWinSize, peerWinSize);
+					rtpSockets.add(socketForClient);
+					synchronized(lock) {
+						readerSocket = socketForClient;
+						lock.notify();
+					}
+				}
 
 				//for every RTPSocket, send stuff the socket wants to send (to clients)
 				for (RTPSocket rtpSocket: rtpSockets) {

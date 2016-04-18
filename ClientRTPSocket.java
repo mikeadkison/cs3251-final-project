@@ -80,17 +80,6 @@ public class ClientRTPSocket {
 		} while (!connectionInitConfirmed);
 		
 
-		//send the last part of the 3-way handshake
-		
-		Packet rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM_ACK, 0, maxWinSize);
-		DatagramPacket connInitLastPacket = new DatagramPacket(rtpInitPacket.getBytes(), rtpInitPacket.getBytes().length, serverIPAddress, serverUDPPort);
-		try {
-			socket.send(connInitLastPacket);
-		} catch (IOException e) {
-			
-			System.exit(-1);
-		}
-
 		ConcurrentLinkedDeque<byte[]> dataInQueue = new ConcurrentLinkedDeque<>();
 		ConcurrentLinkedDeque<byte[]> dataOutQueue = new ConcurrentLinkedDeque<>();
 		

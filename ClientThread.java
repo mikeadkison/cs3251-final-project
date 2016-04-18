@@ -151,6 +151,16 @@ public class ClientThread extends Thread {
 							rtpSocket.highestSeqNumAcked = seqNum;
 						}
 
+					} else if (received.isConnectionInitConfirm()) { //send the last part of the 3-way handshake
+						Packet rtpInitPacket = new Packet(new byte[0], Packet.CONNECTION_INIT_CONFIRM_ACK, 0, rtpSocket.rcvWinSize);
+						DatagramPacket connInitLastPacket = new DatagramPacket(rtpInitPacket.getBytes(), rtpInitPacket.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
+						try {
+							socket.send(connInitLastPacket);
+						} catch (IOException e) {
+							
+							System.exit(-1);
+						}
+
 					}
 				}
 			}
