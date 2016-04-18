@@ -42,7 +42,7 @@ public class ClientThread extends Thread {
 			//send data
 			Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
 			//long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer
-			int winSpaceLeft = rtpSocket.peerWinSize - rtpSocket.unAckedPackets.size() * Packet.getPacketSize();
+			int winSpaceLeft = Math.min(rtpSocket.peerWinSize, rtpSocket.cwnd) - rtpSocket.unAckedPackets.size() * Packet.getPacketSize();
 
 			if (rtpSocket.dataOutQueue.peek() != null
 					&& winSpaceLeft >= Packet.getPacketSize()) { //if use while, not if could have some issues with dominating the connection if the queue is constantly populated
@@ -94,7 +94,7 @@ public class ClientThread extends Thread {
 						
 					}
 					rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
-                    if (rtpSocket.cwnd > 1) { //congestion control - decrease the congestion window if something times out
+                    if (rtpSocket.cwnd > Packet.getPacketSize()) { //congestion control - decrease the congestion window if something times out
                         rtpSocket.cwnd -= 1;
                     }
 				}
@@ -121,7 +121,7 @@ public class ClientThread extends Thread {
 							//do nothing ack(received, rtpSocket, rcvPkt);*/
 						if (received.seqNum <= rtpSocket.highestSeqNumGivenToApplication) {
 							ack(received, rtpSocket, rcvPkt);
-							System.out.println("acked " + received.seqNum + " again");
+							//System.out.println("acked " + received.seqNum + " again");
 						} else {
 							int numPacketsThatBufferCanHold = rtpSocket.rcvWinSize / Packet.getPacketSize();
 							int highestAllowableSeqNum = rtpSocket.highestSeqNumGivenToApplication + numPacketsThatBufferCanHold;
@@ -130,7 +130,7 @@ public class ClientThread extends Thread {
 								rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
 								rtpSocket.transferBufferToDataInQueue(socket); //give the applications a chunk of data if you can
 							} else {
-								System.out.println("had to reject packet #" + received.seqNum);
+								//System.out.println("had to reject packet #" + received.seqNum);
 							}
 						}
 								

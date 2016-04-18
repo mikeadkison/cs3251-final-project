@@ -112,7 +112,7 @@ public class ServerRTPSocket {
 							acceptStatus = AcceptStatus.RECEIVED_CONNECTION_REQUEST;
 							connReqAddr = rcvPkt.getAddress();
 							connReqPort = rcvPkt.getPort();
-							peerWinSize = 500; //FIX
+							peerWinSize = received.winSize; 
 
 						} else if (received.isConnectionInitConfirmAck() //received last part of 3-way handshake
 									&& AcceptStatus.RESPONDED_TO_CONNECTION_REQUEST == acceptStatus
@@ -124,10 +124,10 @@ public class ServerRTPSocket {
 							int index = rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())); //sometimes the data packets from client will reach server before the last part of the 3-way handshake. This is okay because the client will just resend the data when it isn't acked by the server
 							if (index >= 0) {
 								RTPSocket rtpSocket = rtpSockets.get(index);
-								
+
 								if (received.seqNum <= rtpSocket.highestSeqNumGivenToApplication) {
 									ack(received, rtpSocket, rcvPkt);
-									System.out.println("acked " + received.seqNum + " again");
+									//System.out.println("acked " + received.seqNum + " again");
 								} else {
 									int numPacketsThatBufferCanHold = rtpSocket.rcvWinSize / Packet.getPacketSize();
 									int highestAllowableSeqNum = rtpSocket.highestSeqNumGivenToApplication + numPacketsThatBufferCanHold;
@@ -136,7 +136,7 @@ public class ServerRTPSocket {
 										rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
 										rtpSocket.transferBufferToDataInQueue(socket); //give the applications a chunk of data if you can
 									} else {
-										System.out.println("had to reject packet #" + received.seqNum);
+										//System.out.println("had to reject packet #" + received.seqNum);
 									}
 								}
 
@@ -168,7 +168,7 @@ public class ServerRTPSocket {
 							if (seqNum > rtpSocket.highestSeqNumAcked) {
 								rtpSocket.highestSeqNumAcked = seqNum;
 							}
-							System.out.println(">>>>>>received ack #" + received.seqNum);
+							//System.out.println(">>>>>>received ack #" + received.seqNum);
 
 						}
 
@@ -194,7 +194,7 @@ public class ServerRTPSocket {
 					System.out.println("received ack to connection request response, returning from accept");
 					//at this point, the 3-way handshake is complete and the server must set up resources to receive data from the client
 					acceptStatus = null;
-					
+					System.out.println("creating a new socket, peerwinsize " + peerWinSize);
 					RTPSocket socketForClient = new RTPSocket(connReqAddr, connReqPort, new ConcurrentLinkedDeque<byte[]>(), new ConcurrentLinkedDeque<byte[]>(), maxWinSize, peerWinSize);
 					rtpSockets.add(socketForClient);
 					synchronized(lock) {
@@ -217,10 +217,10 @@ public class ServerRTPSocket {
 								
 							}
 							rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
-							if (rtpSocket.cwnd > 1) { //congestion control - decrease the congestion window if something times out
+							if (rtpSocket.cwnd > Packet.getPacketSize()) { //congestion control - decrease the congestion window if something times out
 		                        rtpSocket.cwnd -= 1;
 		                    }
-		                    System.out.println("packet #"+ packet.seqNum + " resent");
+		                    //System.out.println("packet #"+ packet.seqNum + " resent");
 						}
 					}
 
@@ -229,8 +229,9 @@ public class ServerRTPSocket {
 					//send data
 					Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
 					//long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer
-					int winSpaceLeft = rtpSocket.peerWinSize - rtpSocket.unAckedPackets.size() * Packet.getPacketSize();
-
+					int winSpaceLeft = Math.min(rtpSocket.peerWinSize, rtpSocket.cwnd) - rtpSocket.unAckedPackets.size() * Packet.getPacketSize();
+					/*System.out.println("peerwinsize: " + rtpSocket.peerWinSize);
+					System.out.println("cwnd: " + rtpSocket.cwnd);*/
 					if (rtpSocket.dataOutQueue.peek() != null
 							&& winSpaceLeft >= Packet.getPacketSize()) { //if use while, not if could have some issues with dominating the connection if the queue is constantly populated
 
