@@ -25,7 +25,7 @@ public class Packet {
 	protected byte flag;
 	protected int winSize; //the window size advertised by whoever sent this packet (in bytes)
 
-	private static final int PACKET_SIZE_SIZE = 2; //packet size is specified in 2 bytes(uint16). the packet size includes the packet size bytes
+	private static final int USEFUL_PACKET_SIZE_SIZE = 2; //packet size is specified in 2 bytes(uint16). the packet size includes the packet size bytes
 	private static final int CHECKSUM_SIZE = 16; //length of checksum in bytes
 	private static final int SEQNUM_SIZE = 4; //seqnum can be up to 2^32 (4 bytes)
 	private static final int FLAG_SIZE = 1; //1 byte for flags
@@ -37,15 +37,17 @@ public class Packet {
 	protected static final byte CONNECTION_INIT_CONFIRM = (byte) 3;
 	protected static final byte CONNECTION_INIT_CONFIRM_ACK = (byte) 4;
 
+	private static final int PACKET_SIZE = 512; //every packet will be of size 512 bytes, with the data being at most 512 - header size bytes
+
 	/**
 	 * used to construct a packet from received bytes
 	 */
 	public Packet(byte[] bufferBytes) {
-		int packetSize = getPacketSize(bufferBytes); //first, cut off the part of the buffer that is free space, not actually being used to hold the packet
+		int usefulPacketSize = getUsefulPacketSize(bufferBytes); //first, cut off the part of the packet and buffer that aren't being used
 		
-		byte[] packetBytes = new byte[packetSize];
+		byte[] packetBytes = new byte[usefulPacketSize];
 		this.packetBytes = packetBytes;
-		System.arraycopy(bufferBytes, 0, packetBytes, 0, packetSize);
+		System.arraycopy(bufferBytes, 0, packetBytes, 0, usefulPacketSize);
 
 		byte[] checksumBytesFromPacket = getChecksumFromPacket(packetBytes); //extract the checksum from the received packet
 		byte[] packetWithoutChecksum = withoutChecksum(packetBytes); //remove the checksum bytes from the received packet
@@ -80,7 +82,7 @@ public class Packet {
 	 * @return the size of the packet header in bytes
 	 */
 	public static int getHeaderSize() {
-		return CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE;
+		return CHECKSUM_SIZE + WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE;
 	}
 
 	 /** FLAGS: name  #
@@ -93,9 +95,14 @@ public class Packet {
 		return flag == ACK;
 	}
 
-	protected int getPacketSize() {
+	protected int getUsefulPacketSize() {
 		return packetBytes.length;
 	}
+
+	protected static int getPacketSize() {
+		return PACKET_SIZE;
+	}
+
 
 	protected boolean isData() {
 		return flag == DATA;
@@ -117,9 +124,9 @@ public class Packet {
 		return flag == CONNECTION_INIT_CONFIRM_ACK;
 	}
 
-	protected int getPacketSize(byte[] buffer) {
-		byte[] sizeBytes = new byte[PACKET_SIZE_SIZE];
-		System.arraycopy(buffer, CHECKSUM_SIZE + WINDOW_SIZE_SIZE, sizeBytes, 0, PACKET_SIZE_SIZE);
+	protected int getUsefulPacketSize(byte[] buffer) {
+		byte[] sizeBytes = new byte[USEFUL_PACKET_SIZE_SIZE];
+		System.arraycopy(buffer, CHECKSUM_SIZE + WINDOW_SIZE_SIZE, sizeBytes, 0, USEFUL_PACKET_SIZE_SIZE);
 		return ByteBuffer.wrap(sizeBytes).getChar();
 	}
 
@@ -133,7 +140,7 @@ public class Packet {
 	}
 
 	private byte getFlagByte(byte[] packetBytes) {
-		return packetBytes[CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE]; //the flag byte is right after the bytes which specify packet size
+		return packetBytes[CHECKSUM_SIZE + WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE]; //the flag byte is right after the bytes which specify packet size
 	}
 
 	private byte[] withoutChecksum(byte[] packetBytes) {
@@ -157,14 +164,14 @@ public class Packet {
     }
 
     protected byte[] getMessage(byte[] packet) {
-        int messageSize = packet.length - CHECKSUM_SIZE - WINDOW_SIZE_SIZE - PACKET_SIZE_SIZE - SEQNUM_SIZE - FLAG_SIZE; //the message size = packet size - metadata size
+        int messageSize = packet.length - CHECKSUM_SIZE - WINDOW_SIZE_SIZE - USEFUL_PACKET_SIZE_SIZE - SEQNUM_SIZE - FLAG_SIZE; //the message size = packet size - metadata size
         byte[] message = new byte[messageSize];
-        System.arraycopy(packet, CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + SEQNUM_SIZE + FLAG_SIZE, message, 0, messageSize);
+        System.arraycopy(packet, CHECKSUM_SIZE + WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE + SEQNUM_SIZE + FLAG_SIZE, message, 0, messageSize);
         return message;
     }
 
     protected int getSeqNum(byte[] packet) {
-    	return ByteBuffer.wrap(packet, CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE, SEQNUM_SIZE).getInt();
+    	return ByteBuffer.wrap(packet, CHECKSUM_SIZE + WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE + FLAG_SIZE, SEQNUM_SIZE).getInt();
     }
 
     private int getWinSize(byte[] packet) {
@@ -176,21 +183,21 @@ public class Packet {
     }
 
     protected byte[] constructPacket(byte[] data, byte flagByte, int seqNum, int winSize) {
-    	byte[] packetWithoutChecksum = new byte[WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length];
+    	byte[] packetWithoutChecksum = new byte[WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length];
 
     	byte[] winSizeBytes = intToBytes(winSize); //put the window size in the packet
     	System.arraycopy(winSizeBytes, 0, packetWithoutChecksum, 0, WINDOW_SIZE_SIZE);
 
-    	char packetSize = (char) (CHECKSUM_SIZE + WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length); //the size in bytes of the packet
-    	byte[] packetSizeBytes = charToBytes(packetSize);
-    	System.arraycopy(packetSizeBytes, 0, packetWithoutChecksum, WINDOW_SIZE_SIZE, PACKET_SIZE_SIZE); //put packet size in the packet size bytes
+    	char usefulPacketSize = (char) (CHECKSUM_SIZE + WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE + data.length); //the size in bytes of the packet
+    	byte[] usefulPacketSizeBytes = charToBytes(usefulPacketSize);
+    	System.arraycopy(usefulPacketSizeBytes, 0, packetWithoutChecksum, WINDOW_SIZE_SIZE, USEFUL_PACKET_SIZE_SIZE); //put packet size in the packet size bytes
 
-    	packetWithoutChecksum[WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE] = flagByte; //put flags in packet after the packet size bytes
+    	packetWithoutChecksum[WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE] = flagByte; //put flags in packet after the packet size bytes
 
     	byte[] seqNumBytes = intToBytes(seqNum);
-    	System.arraycopy(seqNumBytes, 0, packetWithoutChecksum, WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE, seqNumBytes.length); //put seqNum in packet
+    	System.arraycopy(seqNumBytes, 0, packetWithoutChecksum, WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE + FLAG_SIZE, seqNumBytes.length); //put seqNum in packet
 
-    	System.arraycopy(data, 0, packetWithoutChecksum, WINDOW_SIZE_SIZE + PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE, data.length); //put data in packet
+    	System.arraycopy(data, 0, packetWithoutChecksum, WINDOW_SIZE_SIZE + USEFUL_PACKET_SIZE_SIZE + FLAG_SIZE + SEQNUM_SIZE, data.length); //put data in packet
 
     	byte[] checksum = checksum(packetWithoutChecksum);
     	byte[] withChecksum = combine(checksum, packetWithoutChecksum); //return the full packet (includes the checksum)

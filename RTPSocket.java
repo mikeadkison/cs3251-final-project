@@ -13,7 +13,7 @@ public class RTPSocket {
 	protected int maxRcvWinSize; //the biggest the window can get, also what is sent to peer
 	protected int peerWinSize; //the window size of the host you are connected to
 	protected final List<Packet> bufferList = new LinkedList<>(); //the buffer for stuff received
-	private long highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
+	protected int highestSeqNumGivenToApplication; //used to help figure out if a packet is a duplicate and should be ignored. packets with seq num <= this are no longer cared about/are no longer in buffer
 	private static final String ENCODING = "ISO-8859-1";
 	protected final List<Packet> unAckedPackets = new ArrayList<>();
 	protected final Map<Packet, Long> unAckedPktToTimeSentMap = new HashMap<>();
@@ -101,8 +101,8 @@ public class RTPSocket {
 	/**
 	 * look at the buffer and see what can be given to the application and put that in the dataInQueue
 	 */
-	protected void transferBufferToDataInQueue() {
-		long seqNum = highestSeqNumGivenToApplication + 1;
+	protected void transferBufferToDataInQueue(DatagramSocket socket) {
+		int seqNum = highestSeqNumGivenToApplication + 1;
 		boolean miss = false;
 		seqNumLoop: while (!miss) { //while the packet with the next seqNum can be found in the buffer:
 			for (Packet packet: bufferList) {
@@ -114,12 +114,26 @@ public class RTPSocket {
 					this.rcvWinSize += packet.getPacketSize(); //increase the window size since a packet has been removed from the buffer
 					highestSeqNumGivenToApplication = seqNum;
 					miss = false;
-					
+					ack(packet, socket);
+					System.out.println("acked " + packet.seqNum);
 					seqNum++;
 					continue seqNumLoop;
 				}
 			}
 			miss = true;
+		}
+	}
+
+	private void ack(Packet toAck, DatagramSocket socket) {
+		// ack the received packet even if we have it already
+		
+		Packet ackPack = new Packet(new byte[0], Packet.ACK, toAck.seqNum, this.maxRcvWinSize);
+
+		
+		try {
+			socket.send(new DatagramPacket(ackPack.getBytes(), ackPack.getBytes().length, IP, UDPport));
+		} catch (IOException e) {
+			
 		}
 	}
 
