@@ -42,9 +42,13 @@ public class ftaclient {
 
 				getFromServer(fileName);
 			} else if (command.equals("get-post")) {
-				
+				//not required
 			} else if (command.equals("disconnect")) {
-
+				JSONObject disconnectRequest = new JSONObject();
+				disconnectRequest.put("type", "disconnect");
+				socket.send((disconnectRequest.toString() + "\n").getBytes(ENCODING));
+			} else {
+				System.out.println("not a valid command");
 			}
 		}
 		

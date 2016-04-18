@@ -10,10 +10,12 @@ import java.security.*;
  * packet byte format: [checksum - 16 bytes][window size - 4 bytes][packet size - 2 bytes][FLAG NUMBER? - 1 byte][seqNum - 4 bytes][data - N bytes]
  *
  * FLAGS: name  #
+ *        data | 0 //this packet contains data
  *        ACK | 1
  *        connectionInit | 2 // first of 3 way handshake
  *        connectionInitConfirm | 3 // second of 3 way handshake
  *        connectionInitConfirmAck | 4 //third of 3 way handshake
+ *        close                    | 5 //close the connection
  * the checksum does not not include the packet size 
  */
 public class Packet {
@@ -36,6 +38,8 @@ public class Packet {
 	protected static final byte CONNECTION_INIT = (byte) 2;
 	protected static final byte CONNECTION_INIT_CONFIRM = (byte) 3;
 	protected static final byte CONNECTION_INIT_CONFIRM_ACK = (byte) 4;
+	protected static final byte CLOSE = (byte) 5;
+	protected static final byte CLOSE_ACK = (byte) 6;
 
 	private static final int PACKET_SIZE = 512; //every packet will be of size 512 bytes, with the data being at most 512 - header size bytes
 
@@ -86,11 +90,21 @@ public class Packet {
 	}
 
 	 /** FLAGS: name  #
+	 *        DATA | 0
 	 *        ACK | 1
 	 *        connectionInit | 2 // first of 3 way handshake
 	 *        connectionInitConfirm | 3 // second of 3 way handshake
 	 *        connectionInitConfirmAck | 4 //third of 3 way handshake
+	 *        close | 5 close this connection
 	 */
+	protected boolean isClose() {
+		return flag == CLOSE;
+	}
+
+	protected boolean isCloseACK() {
+		return flag == CLOSE_ACK;
+	}
+
 	protected boolean isAck() {
 		return flag == ACK;
 	}

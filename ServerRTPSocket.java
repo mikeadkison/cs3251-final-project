@@ -172,6 +172,13 @@ public class ServerRTPSocket {
 							}
 							//System.out.println(">>>>>>received ack #" + received.seqNum);
 
+						} else if (received.isCloseACK()) {
+							int index = rtpSockets.indexOf(new RTPSocket(rcvPkt.getAddress(), rcvPkt.getPort())); //sometimes the data packets from client will reach server before the last part of the 3-way handshake. This is okay because the client will just resend the data when it isn't acked by the server
+							if (index >= 0) {
+								RTPSocket rtpSocket = rtpSockets.get(index);
+								rtpSocket.disconnectConfirmed.set(true);
+								rtpSockets.remove(rtpSocket);
+							}
 						}
 
 						
@@ -232,8 +239,7 @@ public class ServerRTPSocket {
 					Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
 					//long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer
 					int winSpaceLeft = Math.min(rtpSocket.peerWinSize, rtpSocket.cwnd) - rtpSocket.unAckedPackets.size() * Packet.getPacketSize();
-					/*System.out.println("peerwinsize: " + rtpSocket.peerWinSize);
-					System.out.println("cwnd: " + rtpSocket.cwnd);*/
+
 					if (rtpSocket.dataOutQueue.peek() != null
 							&& winSpaceLeft >= Packet.getPacketSize()) { //if use while, not if could have some issues with dominating the connection if the queue is constantly populated
 
@@ -271,6 +277,18 @@ public class ServerRTPSocket {
 							rtpSocket.dataOutQueue.offerFirst(unsentBytes); //put unsent bytes back at the beginning of the queue
 						}
 						
+					}
+
+					//disconnect if the socket wants to
+					if (rtpSocket.disconnect.get()) {
+						Packet packet = new Packet(new byte[0], Packet.CLOSE, rtpSocket.seqNum++, rtpSocket.maxRcvWinSize);
+
+						DatagramPacket sndPkt = new DatagramPacket(packet.getBytes(), packet.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
+						try {
+							socket.send(sndPkt);
+						} catch (IOException e) {
+							System.out.println("issue sending disconnect packet");
+						}
 					}
 				}
 			}

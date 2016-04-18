@@ -2,6 +2,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 public class RTPSocket {
 	protected InetAddress IP; //ip of peer
@@ -21,6 +22,8 @@ public class RTPSocket {
 	protected int numBytesUnacked; //number of data bytes unacked
 	protected int totalBytesSent; //number of data bytes sent
 	protected int cwnd; //congestion window - initially the same as the advertised peer window size
+	protected AtomicBoolean disconnect; //used by this rtpsocket to signal to the thread that it wishes to disconnect from its peer
+	protected AtomicBoolean disconnectConfirmed;
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedDeque<byte[]> dataInQueue, ConcurrentLinkedDeque<byte[]> dataOutQueue, int maxRcvWinSize, int peerWinSize) {
 		this(IP, UDPport);
@@ -33,6 +36,8 @@ public class RTPSocket {
 		highestSeqNumGivenToApplication = -1;
 		highestSeqNumAcked = -1;
 		this.cwnd = peerWinSize;
+		this.disconnect = new AtomicBoolean(false);
+		this.disconnectConfirmed = new Atomicboolean(false);
 	}
 
 	/**
@@ -65,6 +70,10 @@ public class RTPSocket {
 		}
 
 		return allDataArr;
+	}
+
+	public void disconnect() {
+		disconnect.set(true);
 	}
 
 	/**

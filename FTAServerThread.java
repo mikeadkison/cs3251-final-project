@@ -65,6 +65,10 @@ public class FTAServerThread extends Thread {
 				}
 				System.out.print("file size in bytes: " + fileBytes.length);
 				socket.send(fileBytes);
+
+			} else if (request.get("type").equals("disconnect")) {
+				//disconnect from the client on the fta level
+				socket.disconnect();
 			}
 		}
 	}
