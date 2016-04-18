@@ -12,6 +12,7 @@ import java.net.UnknownHostException;
  */
 public class ftaclient {
 	private static final String ENCODING = "ISO-8859-1";
+	private static RTPSocket socket;
 
 	public static void main(String[] args) throws IOException, UnsupportedEncodingException {
 		InetAddress serverAddress = null;
@@ -27,7 +28,7 @@ public class ftaclient {
 		int maxRcvWinSize = Integer.parseInt(args[1]);
 
 		ClientRTPSocket clientRTPSocket = new ClientRTPSocket(serverAddress, port, maxRcvWinSize);
-		RTPSocket socket = clientRTPSocket.connect();
+		ftaclient.socket = clientRTPSocket.connect();
 
 		while (true) {
 			Scanner reader = new Scanner(System.in);
@@ -39,39 +40,46 @@ public class ftaclient {
 			if (command.equals("get")) {
 				String fileName = inputMatrix[1];
 
-				JSONObject getRequest = new JSONObject();
-				getRequest.put("type", "get");
-				getRequest.put("fileName", fileName);
-				socket.send((getRequest.toString() + "\n").getBytes(ENCODING));
-
-				long timeLastReceivedData = 0;
-				boolean receivedSomething = false;
-				byte[] fileBytes = new byte[0];
-				do {
-					byte[] receivedBytes = socket.read();
-					if (receivedBytes.length > 0) {
-						System.out.println("received some bytes");
-						byte[] newFileBytes = new byte[fileBytes.length + receivedBytes.length];
-						System.arraycopy(fileBytes, 0, newFileBytes, 0, fileBytes.length);
-						System.arraycopy(receivedBytes, 0, newFileBytes, fileBytes.length, receivedBytes.length);
-						fileBytes = newFileBytes;
-						timeLastReceivedData = System.currentTimeMillis();
-						receivedSomething = true;
-					}
-				} while (!receivedSomething || System.currentTimeMillis() - timeLastReceivedData < 3000); //timeout
+				getFromServer(fileName);
+			} else if (command.equals("get-post")) {
 				
-				FileOutputStream stream = new FileOutputStream("get_" + fileName);
-				try {
-					stream.write(fileBytes);
-				} catch (IOException e) {
-					System.out.println("issue writing file");
-				} finally {
-					stream.close();
-				}
+			} else if (command.equals("disconnect")) {
+
 			}
 		}
 		
 		
+	}
+
+	private static void getFromServer(String fileName) throws IOException, UnsupportedEncodingException {
+		JSONObject getRequest = new JSONObject();
+		getRequest.put("type", "get");
+		getRequest.put("fileName", fileName);
+		socket.send((getRequest.toString() + "\n").getBytes(ENCODING));
+
+		long timeLastReceivedData = 0;
+		boolean receivedSomething = false;
+		byte[] fileBytes = new byte[0];
+		do {
+			byte[] receivedBytes = socket.read();
+			if (receivedBytes.length > 0) {
+				byte[] newFileBytes = new byte[fileBytes.length + receivedBytes.length];
+				System.arraycopy(fileBytes, 0, newFileBytes, 0, fileBytes.length);
+				System.arraycopy(receivedBytes, 0, newFileBytes, fileBytes.length, receivedBytes.length);
+				fileBytes = newFileBytes;
+				timeLastReceivedData = System.currentTimeMillis();
+				receivedSomething = true;
+			}
+		} while (!receivedSomething || System.currentTimeMillis() - timeLastReceivedData < 3000); //timeout
+		
+		FileOutputStream stream = new FileOutputStream("get_" + fileName);
+		try {
+			stream.write(fileBytes);
+		} catch (IOException e) {
+			System.out.println("issue writing file");
+		} finally {
+			stream.close();
+		}
 	}
 
 	private int getFirstIndexOf(byte toFind, byte[] toFindIn) {
