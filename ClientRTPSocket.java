@@ -14,7 +14,7 @@ public class ClientRTPSocket {
 	private InetAddress serverIPAddress;
 	private int serverUDPPort;
 	DatagramSocket socket;
-	int maxWinSize; //max window size in packets
+	int maxWinSize; //max window size in packets of this client, not the peer of course
 	int seqNum;
 
 	public ClientRTPSocket(InetAddress IPAddress, int UDPport, int maxWinSize) {
