@@ -1,6 +1,4 @@
-/**
- * TODO: timeouts
- */
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -153,7 +151,9 @@ public class ServerRTPSocket {
 									pListIter.remove();
 									rtpSocket.unAckedPktToTimeSentMap.remove(packet);
 									rtpSocket.numBytesUnacked -= packet.getDataSize();
-									
+									if (rtpSocket.cwnd < rtpSocket.peerWinSize) { //increase cwnd
+	                                    rtpSocket.cwnd += 1;
+	                                }
 									break;
 								}
 							}
@@ -210,6 +210,9 @@ public class ServerRTPSocket {
 								
 							}
 							rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
+							if (rtpSocket.cwnd > 1) { //congestion control - decrease the congestion window if something times out
+		                        rtpSocket.cwnd -= 1;
+		                    }
 						}
 					}
 

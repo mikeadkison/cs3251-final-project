@@ -20,6 +20,7 @@ public class RTPSocket {
 	protected long highestSeqNumAcked; //highest seq num that we've sent that we received an ack for from our peer
 	protected int numBytesUnacked; //number of data bytes unacked
 	protected int totalBytesSent; //number of data bytes sent
+	protected int cwnd; //congestion window - initially the same as the advertised peer window sie
 
 	public RTPSocket (InetAddress IP, int UDPport, ConcurrentLinkedDeque<byte[]> dataInQueue, ConcurrentLinkedDeque<byte[]> dataOutQueue, int maxRcvWinSize, int peerWinSize) {
 		this(IP, UDPport);
@@ -31,6 +32,7 @@ public class RTPSocket {
 		seqNum = 0;
 		highestSeqNumGivenToApplication = -1;
 		highestSeqNumAcked = -1;
+		this.cwnd = peerWinSize;
 	}
 
 	/**

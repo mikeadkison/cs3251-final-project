@@ -69,8 +69,10 @@ public class ftaclient {
 				fileBytes = newFileBytes;
 				timeLastReceivedData = System.currentTimeMillis();
 				receivedSomething = true;
+				System.out.println("received" + fileBytes.length + " so far");
 			}
-		} while (!receivedSomething || System.currentTimeMillis() - timeLastReceivedData < 10000); //timeout
+
+		} while (!receivedSomething || System.currentTimeMillis() - timeLastReceivedData < 20000); //timeout
 		
 		FileOutputStream stream = new FileOutputStream("get_" + fileName);
 		try {

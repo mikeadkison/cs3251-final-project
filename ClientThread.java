@@ -47,9 +47,9 @@ public class ClientThread extends Thread {
 
 			if (rtpSocket.dataOutQueue.peek() != null
 					&& winSpaceLeft > Packet.getHeaderSize()) { //if use while, not if could have some issues with dominating the connection if the queue is constantly populated
-				if (winSpaceLeft > 0) {
+/*				if (winSpaceLeft > 0) {
 					
-				}
+				}*/
 
 				byte[] removedBytes = rtpSocket.dataOutQueue.poll();
 				int maxDataSize = MAX_PACKET_SIZE - Packet.getHeaderSize(); //the most data we can send without going over 1000 byte packet size limit
@@ -98,6 +98,9 @@ public class ClientThread extends Thread {
 						
 					}
 					rtpSocket.unAckedPktToTimeSentMap.put(packet, System.currentTimeMillis());
+                    if (rtpSocket.cwnd > 1) { //congestion control - decrease the congestion window if something times out
+                        rtpSocket.cwnd -= 1;
+                    }
 				}
 			}
 
@@ -141,7 +144,9 @@ public class ClientThread extends Thread {
 								pListIter.remove();
 								rtpSocket.unAckedPktToTimeSentMap.remove(packet);
 								rtpSocket.numBytesUnacked -= packet.getDataSize();
-								
+								if (rtpSocket.cwnd < rtpSocket.peerWinSize) { //increase cwnd
+                                    rtpSocket.cwnd += 1;
+                                }
 								break;
 							}
 						}
