@@ -131,7 +131,7 @@ public class ClientThread extends Thread {
 								//rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
 								ack(received, rtpSocket, rcvPkt);
 							} else {
-								System.out.println("had to reject packet #" + received.seqNum);
+								//System.out.println("had to reject packet #" + received.seqNum);
 							}
 						}
 								

@@ -128,7 +128,7 @@ public class RTPSocket {
 					this.rcvWinSize += packet.getPacketSize(); //increase the window size since a packet has been removed from the buffer
 					highestSeqNumGivenToApplication = seqNum;
 					miss = false;
-					System.out.println("acked " + packet.seqNum);
+
 					seqNum++;
 					continue seqNumLoop;
 				}

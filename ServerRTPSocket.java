@@ -19,10 +19,13 @@ public class ServerRTPSocket {
 		this.maxWinSize = maxWinSize;
 		msgsForThread = new ConcurrentLinkedQueue<>();
 		try {
-			socket = new DatagramSocket(UDPport);
+			socket = new DatagramSocket(UDPport, InetAddress.getByName("0.0.0.0"));
 		} catch (SocketException e) {
-			
+			System.out.println("issue binding to listen port");
+			e.printStackTrace();
 			System.exit(-1);
+		} catch (UnknownHostException e) {
+			System.out.println("issue binding to socket ");
 		}
 
 		(new ServerThread(socket, msgsForThread)).start();
@@ -235,7 +238,7 @@ public class ServerRTPSocket {
 					}
 
 						
-					//fix combine multiple things in queue
+
 					//send data
 					Iterator<byte[]> dataOutQueueItr = rtpSocket.dataOutQueue.iterator();
 					//long highestAllowableSeqNum = rtpSocket.getHighestAcceptableRemoteSeqNum(); //the highest sequence number that can fit in the remote's buffer

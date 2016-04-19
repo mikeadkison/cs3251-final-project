@@ -26,6 +26,7 @@ public class ClientRTPSocket {
 	}
 
 	public RTPSocket connect() {
+		//System.out.println("connecting to" + serverIPAddress + " " + serverUDPPort);
 		/*
 		 * initialize connection with 3-way handshake
 		 */
