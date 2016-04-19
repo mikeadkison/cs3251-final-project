@@ -171,6 +171,15 @@ public class ClientThread extends Thread {
 							System.exit(-1);
 						}
 
+					} else if (received.isClose()) {
+						Packet closeACK = new Packet(new byte[0], Packet.CLOSE_ACK, 0, rtpSocket.rcvWinSize);
+						DatagramPacket closeACKUDPPkt = new DatagramPacket(closeACK.getBytes(), closeACK.getBytes().length, rtpSocket.IP, rtpSocket.UDPport);
+						try {
+							socket.send(closeACKUDPPkt);
+						} catch (IOException e) {
+							
+							System.exit(-1);
+						}
 					}
 				}
 			}

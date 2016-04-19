@@ -37,7 +37,7 @@ public class RTPSocket {
 		highestSeqNumAcked = -1;
 		this.cwnd = peerWinSize;
 		this.disconnect = new AtomicBoolean(false);
-		this.disconnectConfirmed = new Atomicboolean(false);
+		this.disconnectConfirmed = new AtomicBoolean(false);
 	}
 
 	/**
@@ -52,6 +52,10 @@ public class RTPSocket {
 	 * gives the application a byte array of all the data received so far. The data is consumed
 	 */
 	public byte[] read() {
+		if (disconnect.get()) {
+			return null;
+		}
+
 		this.transferBufferToDataInQueue();
 		Object[] arrays = (Object[]) dataInQueue.toArray();
 

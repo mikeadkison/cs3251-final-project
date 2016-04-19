@@ -47,6 +47,12 @@ public class ftaclient {
 				JSONObject disconnectRequest = new JSONObject();
 				disconnectRequest.put("type", "disconnect");
 				socket.send((disconnectRequest.toString() + "\n").getBytes(ENCODING));
+				//wait until server disconnects
+				while (socket.read() != null) {
+					//wait til the rtp connection is closed
+				}
+				System.out.println("server terminated connection");
+				System.exit(0);
 			} else {
 				System.out.println("not a valid command");
 			}
