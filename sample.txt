@@ -1,0 +1,29 @@
+RDBA SAMPLE:
+0$ java dbengineRTP 8080
+0 >> creating server
+
+1$ java dbclientRTP 127.0.0.1:8080 903076259 gpa_hours
+1 >>  sent request
+0 >> client connected
+0 >> request: 903076259:gpa_hours:
+1 >> From server: gpa_hours: 63
+
+
+FTA SAMPLE - WINDOW SIZE OF 1 PACKET (512 bytes):
+0$ java -classpath .:json-simple-1.1.1.jar ftaserver 8080 512
+1$ java -classpath .:json-simple-1.1.1.jar ftaclient 127.0.0.1:8080 512
+1 >> Ready to receive commands
+1 << get 3251.jpg
+0 >> request: {"fileName":"3251.jpg","type":"get"}
+  >> file size in bytes: 360680
+1 >> Ready to receive commands
+
+FTA SAMPLE - WINDOW SIZE GREATER THAN 1 PACKET (More than 512 bytes):
+0$ java -classpath .:json-simple-1.1.1.jar ftaserver 8080 5000
+1$ java -classpath .:json-simple-1.1.1.jar ftaclient 127.0.0.1:8080 2930
+1 >> Ready to receive commands
+1 << get 3251.jpg
+0 >> request: {"fileName":"3251.jpg","type":"get"}
+  >> file size in bytes: 360680
+1 >> Ready to receive commands
+
