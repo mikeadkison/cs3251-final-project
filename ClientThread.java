@@ -129,8 +129,9 @@ public class ClientThread extends Thread {
 								rtpSocket.bufferList.add(received); //store the received packet (which is JSON) as a string in the appropriate buffer(the buffer associated with this client)
 								rtpSocket.rcvWinSize -= received.getPacketSize(); //decrease the window size by the size of the packet that was just put in it
 								//rtpSocket.transferBufferToDataInQueue(); //give the applications a chunk of data if you can
+								ack(received, rtpSocket, rcvPkt);
 							} else {
-								//System.out.println("had to reject packet #" + received.seqNum);
+								System.out.println("had to reject packet #" + received.seqNum);
 							}
 						}
 								
